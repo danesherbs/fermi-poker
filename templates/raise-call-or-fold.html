@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="flex w-full justify-center">
+    <div class="max-w-xs space-y-6 my-8 px-2">
+        <div class="w-full">
+            <div class="text-xs">Instruction</div>
+            {% if is_your_turn %}
+            <div>Raise, call or fold</div>
+            {% else %}
+            <div>Wait for opponent to raise, call or fold</div>
+            {% endif %}
+        </div>
+        <div class="flex">
+            <div class="w-1/2">
+                <div class="text-xs">Balance</div>
+                <div>${{ balance }}</div>
+            </div>
+            <div class="w-1/2">
+                <div class="text-xs">Timer</div>
+                <div id="timer">0:15</div>
+            </div>
+        </div>
+        <div>
+            <div class="text-xs">Problem</div>
+            <div>{{ problem }}</div>
+        </div>
+        <div class="w-full">
+            {% if is_estimator %}
+            <div class="text-xs">Estimate</div>
+            {% else %}
+            <div class="text-xs">Opponent's estimate</div>
+            {% endif %}
+            <div>
+                10^({{ estimate }} +/- {{ error }})
+            </div>
+        </div>
+        <div class="flex">
+            <div class="w-1/2">
+                <div class="text-xs">Your ante</div>
+                <div>
+                    ${{ ante }}
+                </div>
+            </div>
+            <div class="w-1/2">
+                <div class="text-xs">Opponent's ante</div>
+                <div>
+                    ${{ opponents_ante }}
+                </div>
+            </div>
+        </div>
+        <div class="space-y-1">
+            {% if is_your_turn %}
+            <button class="bg-black text-white border-2 border black w-full py-1" onclick="raise()">raise $1</button>
+            <button class="bg-black text-white border-2 border black w-full py-1" onclick="call()">call</button>
+            <button class="bg-black text-white border-2 border black w-full py-1" onclick="fold()">fold</button>
+            {% endif %}
+        </div>
+    </div>
+</div>
+<script>
+    const game_id = "{{ game_id }}";
+    const is_your_turn = "{{ is_your_turn }}" == "True";
+
+    let minutes = 0;
+    let seconds = 15;
+
+    const countdown = () => {
+        if (seconds < 0) {
+            minutes--;
+            seconds = 59;
+        }
+
+        if (minutes < 0) {
+            clearInterval(interval);
+
+            if (is_your_turn) {
+                fetch(`/api/fold`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ game_id })
+                }).then(() => { window.location.href = `/game/${game_id}/play-again` })
+            }
+        }
+
+        const minutesStr = minutes < 10 ? `${minutes}` : minutes;
+        const secondsStr = seconds < 10 ? `0${seconds}` : seconds;
+
+        document.getElementById("timer").innerText = `${minutesStr}:${secondsStr}`;
+
+        seconds--;
+    };
+
+    const raise = () => {
+        fetch(`/api/raise`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ game_id })
+        }).then(() => {
+            window.location.reload();
+        })
+    }
+
+    const call = () => {
+        fetch(`/api/call`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ game_id })
+        }).then(() => {
+            window.location.reload();
+        })
+    }
+
+    const fold = () => {
+        fetch(`/api/fold`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ game_id })
+        }).then(() => {
+            window.location.href = `/game/${game_id}/play-again`
+        })
+    }
+
+    const isItMyTurnYet = () => {
+        fetch(`/api/game/${game_id}/is-your-turn`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.is_your_turn) {
+                    window.location.reload();
+                }
+            })
+    }
+
+    const interval = setInterval(countdown, 1000);
+
+    if (!is_your_turn) {
+        const turnsInterval = setInterval(isItMyTurnYet, 1000);
+    }
+</script>
+{% endblock %}

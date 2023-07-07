@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="flex w-full justify-center">
+    <div class="max-w-xs">
+        <div class="w-full text-center my-8">Want to play another round?</div>
+        <div class="space-y-1">
+            <button onclick="yes()" class="w-full border-2 border-black px-2 py-1 hover:text-white hover:bg-black">
+                yes
+            </button>
+            <button onclick="no()" class="w-full border-2 border-black px-2 py-1 hover:text-white hover:bg-black">
+                no
+            </button>
+        </div>
+        <div id="message" class="text-red-600"></div>
+    </div>
+</div>
+<script>
+    const game_id = "{{ game_id }}";
+
+    const yes = () => {
+        fetch("/api/join", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ game_id })
+        })
+            .then(response => response.json())
+            .then(response => {
+                if (!response.success) {
+                    document.getElementById("message").innerHTML = response.message; return;
+                }
+
+                window.location.href = `/game/${game_id}/waiting-room`;
+            })
+    }
+
+    const no = () => { window.location.href = "/" }
+</script>
+{% endblock %}

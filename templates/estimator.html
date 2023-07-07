@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="flex w-full justify-center">
+    <div class="max-w-xs space-y-6 my-8 px-2">
+        <div class="flex">
+            <div class="w-1/2">
+                <div class="text-xs">Balance</div>
+                <div>${{ balance }}</div>
+            </div>
+            <div class="w-1/2">
+                <div class="text-xs">Timer</div>
+                <div id="timer">2:30</div>
+            </div>
+        </div>
+        <div>
+            <div class="text-xs">Problem</div>
+            <div>{{ problem }}</div>
+        </div>
+        <div class="flex">
+            <div class="w-1/3">
+                <div class="text-xs">Estimate</div>
+                <div>
+                    <select id="estimate" class="w-full px-4 py-1">
+                        {% for num in range(-15, 16) %}
+                        <option value="{{ num }}">{{ num }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+            <div class="w-1/3 flex items-center justify-center">
+                + / -
+            </div>
+            <div class="w-1/3">
+                <div class="text-xs">Error</div>
+                <div>
+                    <select id="error" class="w-full px-4 py-1">
+                        {% for num in range(0, 5) %}
+                        <option value="{{ num }}">{{ num }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+        </div>
+        <div class="text-xs text-center w-full">e.g. 3 +/ 2 corresponds to 10^(3 +/ 2)</div>
+        <div class="space-y-1">
+            <button class="bg-black text-white border-2 border black w-full py-1" onclick="submit()">submit</button>
+            <button class="border-2 border black w-full py-1" onclick="fold()">fold</button>
+        </div>
+    </div>
+</div>
+<script>
+    const game_id = "{{ game_id }}";
+
+    let minutes = 2;
+    let seconds = 30;
+
+    const countdown = () => {
+        if (seconds < 0) {
+            minutes--;
+            seconds = 59;
+        }
+
+        if (minutes < 0) {
+            clearInterval(interval);
+
+            fetch(`/api/fold`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ game_id: game_id })
+            }).then(() => { window.location.href = `/game/${game_id}/play-again` })
+        }
+
+        const minutesStr = minutes < 10 ? `${minutes}` : minutes;
+        const secondsStr = seconds < 10 ? `0${seconds}` : seconds;
+
+        document.getElementById("timer").innerText = `${minutesStr}:${secondsStr}`;
+
+        seconds--;
+    };
+
+    const interval = setInterval(countdown, 1000);
+
+    const submit = () => {
+        const estimate = document.getElementById("estimate").value;
+        const error = document.getElementById("error").value;
+
+        fetch(`/api/submit`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ game_id, estimate, error })
+        }).then(() => { window.location.href = `/game/${game_id}/raise-call-or-fold` })
+    }
+
+    const fold = () => {
+        fetch(`/api/fold`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ game_id })
+        }).then(() => { window.location.href = `/game/${game_id}/play-again` })
+    }
+</script>
+{% endblock %}

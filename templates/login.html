@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="flex w-full justify-center">
+    <div class="max-w-xs space-y-2">
+        <div class="w-full text-center text-3xl font-bold my-8">fermi poker</div>
+        <div>
+            <div>name</div>
+            <div class="space-y-2">
+                <input id="username" type="text" class="w-full border-2 border-black px-2" placeholder="vince">
+                <button onclick="login()" class="w-full border-2 border-black px-2 hover:text-white hover:bg-black">
+                    ok
+                </button>
+            </div>
+            <div id="message" class="text-xs text-red-600 mt-4"></div>
+        </div>
+    </div>
+</div>
+<script>
+    const login = () => {
+        const username = document.getElementById("username").value;
+
+        fetch("/api/login", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ username })
+        })
+            .then(response => response.json())
+            .then(response => {
+                if (!response.success) {
+                    document.getElementById("message").innerHTML = response.message; return;
+                }
+
+                window.location.href = "/"
+            })
+    }
+</script>
+{% endblock %}

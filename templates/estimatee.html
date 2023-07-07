@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="flex w-full justify-center">
+    <div class="max-w-xs space-y-6 my-8 px-2">
+        <div class="w-full">
+            <div class="text-xs">Instruction</div>
+            <div>Hang tight! Your opponent is estimating the problem below...</div>
+        </div>
+        <div class="flex">
+            <div class="w-1/2">
+                <div class="text-xs">Balance</div>
+                <div>${{ balance }}</div>
+            </div>
+            <div class="w-1/2">
+                <div class="text-xs">Timer</div>
+                <div id="timer">2:30</div>
+            </div>
+        </div>
+        <div>
+            <div class="text-xs">Problem</div>
+            <div>{{ problem }}</div>
+        </div>
+    </div>
+</div>
+<script>
+    const game_id = "{{ game_id }}";
+
+    let minutes = 2;
+    let seconds = 30;
+
+    const countdown = () => {
+        if (seconds < 0) {
+            minutes--;
+            seconds = 59;
+        }
+
+        if (minutes < 0) {
+            clearInterval(interval);
+
+            fetch(`/api/fold`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ game_id: game_id })
+            }).then(() => { window.location.href = `/game/${game_id}/play-again` })
+        }
+
+        const minutesStr = minutes < 10 ? `${minutes}` : minutes;
+        const secondsStr = seconds < 10 ? `0${seconds}` : seconds;
+
+        document.getElementById("timer").innerText = `${minutesStr}:${secondsStr}`;
+
+        seconds--;
+    };
+
+    const isGameOver = () => {
+        fetch(`/api/game/${game_id}/number-of-players`, { method: "GET" })
+            .then(response => response.json())
+            .then(data => {
+                if (!data.success) {
+                    console.error(data.message); return;
+                }
+
+                if (data.number_of_players == 0) {
+                    window.location.href = `/game/${game_id}/play-again`; return;  // player folded
+                }
+
+                if (data.number_of_players == 1) {
+                    window.location.href = `/game/${game_id}/play-again`; return; // player folded but wants to play again
+                }
+
+                setTimeout(isGameOver, 1000); // waiting for opponent to estimate
+            })
+    }
+
+    const hasOpponentEstimated = () => {
+        fetch(`/api/game/${game_id}/has-estimate`, { method: "GET" })
+            .then(response => response.json())
+            .then(data => {
+                if (!data.success) {
+                    console.error(data.message); return;
+                }
+
+                if (data.has_estimate) {
+                    window.location.href = `/game/${game_id}/raise-call-or-fold`; return;
+                }
+
+                setTimeout(hasOpponentEstimated, 1000); // waiting for opponent to estimate
+            })
+    }
+
+    const interval = setInterval(countdown, 1000);
+    window.onload = isGameOver;
+    window.onload = hasOpponentEstimated;
+</script>
+{% endblock %}

@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="flex w-full justify-center">
+    <div class="max-w-xs space-y-8">
+        <div class="w-full text-center text-3xl font-bold mt-8">fermi poker</div>
+        <div class="text-sm mb-4">
+            <span>You're signed in as "{{ username }}"</span>
+            <button onclick="logout()" class="underline">sign out</button>
+        </div>
+        <div class="space-y-2">
+            <div>
+                <div>game code</div>
+                <input id="game_id" type="text" class="w-full border-2 border-black px-2 mb-1" placeholder="UYGBD">
+                <button onclick="join()" class="w-full border-2 border-black px-2 hover:text-white hover:bg-black">
+                    join
+                </button>
+            </div>
+            <div class="w-full text-center">or</div>
+            <button onclick="create()" class="w-full border-2 border-black px-2 hover:text-white hover:bg-black">
+                create game
+            </button>
+            <div id="message" class="text-red-600"></div>
+        </div>
+    </div>
+</div>
+<script>
+    const join = () => {
+        const game_id = document.getElementById("game_id").value;
+
+        fetch("/api/join", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ game_id })
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (!data.success) {
+                    document.getElementById("message").innerHTML = data.message; return;
+                }
+
+                window.location.href = `/game/${game_id}/waiting-room`
+            })
+    }
+
+    const create = () => {
+        fetch("/api/create", { method: "GET" })
+            .then(response => response.json())
+            .then(data => {
+                if (!data.success) {
+                    document.getElementById("message").innerHTML = data.message; return;
+                }
+
+                window.location.href = `/game/${data.game_id}/waiting-room`
+            })
+    }
+
+    const logout = () => {
+        fetch("/api/logout", { method: "GET" })
+            .then(response => response.json())
+            .then(response => {
+                if (!response.success) {
+                    document.getElementById("message").innerHTML = response.message; return;
+                }
+
+                window.location.href = "/"
+            })
+    }
+</script>
+{% endblock %}
