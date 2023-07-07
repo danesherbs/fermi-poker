@@ -297,7 +297,7 @@ def raise_ante() -> Response:
     # TODO: finish raise logic
 
     game = games[game_id]
-    new_game = game.switch_turns()
+    new_game = game.raise_ante().switch_turns()
     games[game_id] = new_game
 
     return jsonify({"success": True, "message": "Successfully raised"})
@@ -310,12 +310,10 @@ def call_ante() -> Response:
     if game_id not in games:
         return jsonify({"error": "Game not found"})
 
-    # TODO: finish call logic
-
     game = games[game_id]
-    new_game = game.switch_turns()
+    new_game = game.call_ante().switch_turns()
     games[game_id] = new_game
-
+    
     return jsonify({"success": True, "message": "Successfully called"})
 
 @app.route("/api/game/<game_id>/is-your-turn", methods=["GET"])

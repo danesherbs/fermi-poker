@@ -209,6 +209,24 @@ class Game:
             return self.other_ante
 
         raise ValueError("Username not found in game!")
+    
+    def raise_ante(self) -> "Game":
+        if self.player is None or self.other_player is None:
+            raise ValueError("Game has no players!")
+
+        if self.turn == "player":
+            return replace(self, ante=self.ante + 1)
+        
+        return replace(self, other_ante=self.other_ante + 1)
+    
+    def call_ante(self) -> "Game":
+        if self.player is None or self.other_player is None:
+            raise ValueError("Game has no players!")
+
+        if self.turn == "player":
+            return replace(self, ante=self.other_ante)
+        
+        return replace(self, other_ante=self.ante)
 
 
 def is_valid_game_id(game_id: str) -> bool:
