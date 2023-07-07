@@ -329,11 +329,13 @@ def get_is_my_turn(game_id: str) -> Response:
     if username is None:
         return jsonify({"success": False, "message": "User not logged in"})
 
-    player = game.get_turn()
+    try:
+        player = game.get_turn()
+    except ValueError as e:
+        return jsonify({"success": False, "message": str(e)})
+    
     is_your_turn = username == player.username
 
-    print(f"Is {username}'s turn? {is_your_turn}")
-    
     return jsonify({"success": True, "is_your_turn": is_your_turn})
 
 

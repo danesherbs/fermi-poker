@@ -89,7 +89,9 @@
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ game_id, estimate, error })
-        }).then(() => { window.location.href = `/game/${game_id}/raise-call-or-fold` })
+        }).then(() => {
+            window.location.href = `/game/${game_id}/raise-call-or-fold`;
+        })
     }
 
     const fold = () => {
@@ -97,7 +99,9 @@
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ game_id })
-        }).then(() => { window.location.href = `/game/${game_id}/play-again` })
+        }).then(() => {
+            window.location.href = `/game/${game_id}/play-again`;
+        })
     }
 </script>
 {% endblock %}

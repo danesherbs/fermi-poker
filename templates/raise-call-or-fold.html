@@ -72,7 +72,7 @@
         }
 
         if (minutes < 0) {
-            clearInterval(interval);
+            clearInterval(countdownInterval);
 
             if (is_your_turn) {
                 fetch(`/api/fold`, {
@@ -131,7 +131,29 @@
             })
     }
 
-    const interval = setInterval(countdown, 1000);
+    const hasOpponentFolded = () => {
+        fetch(`/api/game/${game_id}/number-of-players`, { method: "GET" })
+            .then(response => response.json())
+            .then(data => {
+                if (!data.success) {
+                    clearInterval(foldedInterval);
+                    console.error(data.message); return;
+                }
+
+                if (data.number_of_players == 0) {
+                    clearInterval(foldedInterval);
+                    window.location.href = `/game/${game_id}/play-again`; return;  // player folded
+                }
+
+                if (data.number_of_players == 1) {
+                    clearInterval(foldedInterval);
+                    window.location.href = `/game/${game_id}/play-again`; return; // player folded but wants to play again
+                }
+            })
+    }
+
+    const countdownInterval = setInterval(countdown, 1000);
+    const foldedInterval = setInterval(hasOpponentFolded, 1000);
 
     if (!is_your_turn) {
         const turnsInterval = setInterval(isItMyTurnYet, 1000);

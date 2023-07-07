@@ -53,7 +53,7 @@
         seconds--;
     };
 
-    const isGameOver = () => {
+    const hasOpponentFolded = () => {
         fetch(`/api/game/${game_id}/number-of-players`, { method: "GET" })
             .then(response => response.json())
             .then(data => {
@@ -69,19 +69,19 @@
                     window.location.href = `/game/${game_id}/play-again`; return; // player folded but wants to play again
                 }
 
-                setTimeout(isGameOver, 1000); // waiting for opponent to estimate
+                setTimeout(hasOpponentFolded, 1000); // waiting for opponent to estimate
             })
     }
 
     const hasOpponentEstimated = () => {
-        fetch(`/api/game/${game_id}/has-estimate`, { method: "GET" })
+        fetch(`/api/game/${game_id}/is-your-turn`, { method: "GET" })
             .then(response => response.json())
             .then(data => {
                 if (!data.success) {
-                    console.error(data.message); return;
+                    console.error(data.message);
                 }
 
-                if (data.has_estimate) {
+                if (data.is_your_turn) {
                     window.location.href = `/game/${game_id}/raise-call-or-fold`; return;
                 }
 
@@ -90,7 +90,10 @@
     }
 
     const interval = setInterval(countdown, 1000);
-    window.onload = isGameOver;
-    window.onload = hasOpponentEstimated;
+
+    window.onload = () => {
+        hasOpponentFolded();
+        hasOpponentEstimated()
+    };
 </script>
 {% endblock %}
