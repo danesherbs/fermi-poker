@@ -137,7 +137,7 @@
     }
 
     const hasOpponentFolded = () => {
-        fetch(`/api/game/${game_id}/number-of-players`, { method: "GET" })
+        fetch(`/api/game/${game_id}/has-folded`, { method: "GET" })
             .then(response => response.json())
             .then(data => {
                 if (!data.success) {
@@ -145,14 +145,9 @@
                     console.error(data.message); return;
                 }
 
-                if (data.number_of_players == 0) {
+                if (data.has_folded) {
                     clearInterval(foldedInterval);
-                    window.location.href = `/game/${game_id}/play-again`; return;  // player folded
-                }
-
-                if (data.number_of_players == 1) {
-                    clearInterval(foldedInterval);
-                    window.location.href = `/game/${game_id}/play-again`; return; // player folded but wants to play again
+                    window.location.href = `/game/${game_id}/play-again`;
                 }
             })
     }
@@ -166,11 +161,9 @@
                     console.error(data.message); return;
                 }
 
-                console.log(data)
-
                 if (data.has_called) {
                     clearInterval(foldedInterval);
-                    window.location.href = `/game/${game_id}/outcome`; return; // player folded but wants to play again
+                    window.location.href = `/game/${game_id}/outcome`;
                 }
             })
     }
@@ -180,7 +173,7 @@
     const calledInterval = setInterval(hasOpponentCalled, 1000);
 
     if (!is_your_turn) {
-        const turnsInterval = setInterval(isItMyTurnYet, 300);
+        const turnsInterval = setInterval(isItMyTurnYet, 1000);
     }
 </script>
 {% endblock %}

@@ -34,7 +34,7 @@
         <div class="w-full">
             <div class="text-xs">Answer</div>
             <div>
-                10^{{ expected_oom }}
+                10^{{ expected_oom }} <a class="text-xs text-blue-600 hover:underline" href="{{ source }}">source</span>
             </div>
         </div>
         <button class="bg-black text-white border-2 border black w-full py-1" onclick="ok()">ok</button>
@@ -44,13 +44,7 @@
     const game_id = "{{ game_id }}";
 
     const ok = () => {
-        fetch(`/api/fold`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ game_id })
-        }).then(() => {
-            window.location.href = `/game/${game_id}/play-again`
-        })
+        window.location.href = `/game/${game_id}/play-again`;
     }
 </script>
 {% endblock %}

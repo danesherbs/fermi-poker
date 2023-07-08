@@ -1,3 +1,5 @@
+import threading
+
 from dataclasses import asdict
 from flask import Flask, render_template, request, session, jsonify, Response
 from typing import Dict
@@ -8,6 +10,8 @@ app = Flask(__name__)
 app.secret_key = "super secret key"
 games: Dict[str, Game] = {}
 players: Dict[str, Player] = {}
+
+lock = threading.Lock()
 
 
 @app.route("/")
@@ -31,28 +35,27 @@ def start_game(game_id: str) -> str:
         return render_template("error.html", message=f"User not logged in!")
 
     game = games[game_id]
-
+    
     if game.get_number_of_players() != 2:
         return render_template(
             "error.html", message=f"Game must have two players to play!"
         )
 
     player = game.get_player(username)
-    problem = "How many beats will your heart make in a lifetime?"
 
     if game.is_estimator(username):
         return render_template(
             "estimator.html",
             game_id=game_id,
             balance=player.balance,
-            problem=problem,
+            problem=game.problem.description,
         )
-
+    
     return render_template(
         "estimatee.html",
         game_id=game_id,
         balance=player.balance,
-        problem=problem,
+        problem=game.problem.description,
     )
 
 
@@ -137,25 +140,29 @@ def show_outcome(game_id: str) -> str:
     if username is None:
         return render_template("error.html", message=f"User not logged in!")
     
-    game = games[game_id]
-    player = game.get_player(username)
-    balance = player.balance
-    problem = game.problem
-    estimate = game.get_estimate()
-    error = game.get_error()
-    is_estimator = game.is_estimator(username)
+    with lock:
+        game = games[game_id]
+        player = game.get_player(username)
+        balance = player.balance
+        problem = game.problem
+        estimate = game.get_estimate()
+        error = game.get_error()
+        is_estimator = game.is_estimator(username)
 
-    assert estimate is not None
-    assert error is not None
+        assert estimate is not None
+        assert error is not None
 
-    opponent = game.get_opponent(username)
-    
-    assert opponent is not None
+        expected_oom = game.problem.answer
+        payout = game.get_payout()
+        you_won = game.is_winner(username)
 
-    expected_oom = game.expected_oom
-    payout = game.get_payout()
-    you_won = game.is_winner(username)
-    
+        new_game = game.remove_player(username)
+
+        if new_game.get_number_of_players() == 0:
+            new_game = new_game.reset().swtich_estimator()
+
+        games[game_id] = new_game
+
     return render_template(
         "outcome.html",
         game_id=game_id,
@@ -167,6 +174,7 @@ def show_outcome(game_id: str) -> str:
         expected_oom=expected_oom,
         payout=abs(payout),
         you_won=you_won,
+        source=game.problem.source,
     )
 
     
@@ -225,8 +233,12 @@ def create_game() -> Response:
                 "message": "Username must be a non-empty string!",
             }
         )
-
-    player = Player.create(username)
+    
+    if username not in players:
+        player = Player.create(username)
+        players[username] = player
+    
+    player = players[username]
     new_game = Game.create(player=player, other_player=None)
     games[new_game.id] = new_game
 
@@ -303,17 +315,20 @@ def fold() -> Response:
         return jsonify({"error": "Game not found"})
 
     game = games[game_id]
-
+    
     try:
-        new_game = game.fold().swtich_estimator().kick_players()
+        tmp_game = game.fold()
+        new_player = tmp_game.player
+        new_other_player = tmp_game.other_player
+        new_game = tmp_game.swtich_estimator().kick_players()
     except ValueError as e:
         return jsonify({"error": str(e)})
 
-    assert new_game.player is not None
-    players[new_game.player.username] = new_game.player
+    assert new_player is not None
+    players[new_player.username] = new_player
 
-    assert new_game.other_player is not None
-    players[new_game.other_player.username] = new_game.other_player
+    assert new_other_player is not None
+    players[new_other_player.username] = new_other_player
 
     games[game_id] = new_game
 
@@ -360,7 +375,7 @@ def call_ante() -> Response:
         return jsonify({"error": "Game not found"})
 
     game = games[game_id]
-    new_game = game.call_ante().switch_turns()
+    new_game = game.call_ante()
     games[game_id] = new_game
 
     assert game.player is not None
@@ -406,6 +421,22 @@ def has_called(game_id: str) -> Response:
     has_called = game.ante == game.other_ante
 
     return jsonify({"success": True, "has_called": has_called})
+
+@app.route("/api/game/<game_id>/has-folded", methods=["GET"])
+def has_folded(game_id: str) -> Response:
+    if game_id not in games:
+        return jsonify({"success": False, "message": "Game not found"})
+
+    game = games[game_id]
+    username = session.get("username", None)
+
+    if username is None:
+        return jsonify({"success": False, "message": "User not logged in"})
+    
+    n_players = game.get_number_of_players()
+    has_folded = n_players == 0
+
+    return jsonify({"success": True, "has_folded": has_folded})
 
 
 if __name__ == "__main__":

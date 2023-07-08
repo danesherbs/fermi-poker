@@ -54,20 +54,18 @@
     };
 
     const hasOpponentFolded = () => {
-        fetch(`/api/game/${game_id}/number-of-players`, { method: "GET" })
+        fetch(`/api/game/${game_id}/has-folded`, { method: "GET" })
             .then(response => response.json())
             .then(data => {
                 if (!data.success) {
                     console.error(data.message); return;
                 }
 
-                if (data.number_of_players == 0) {
+                if (data.has_folded) {
                     window.location.href = `/game/${game_id}/play-again`; return;  // player folded
                 }
 
-                if (data.number_of_players == 1) {
-                    window.location.href = `/game/${game_id}/play-again`; return; // player folded but wants to play again
-                }
+                console.log("has-folded data:", data)
 
                 setTimeout(hasOpponentFolded, 1000); // waiting for opponent to estimate
             })

@@ -1,4 +1,5 @@
 import random
+import pandas as pd
 
 from dataclasses import dataclass, replace
 from typing import Literal
@@ -7,7 +8,8 @@ from typing import Literal
 @dataclass(frozen=True)
 class Problem:
     description: str
-    oom: int
+    answer: int
+    source: str
 
 @dataclass(frozen=True)
 class Player:
@@ -27,8 +29,7 @@ class Game:
     player: Player | None
     other_player: Player | None
     id: str
-    problem: str
-    expected_oom: int
+    problem: Problem
     actual_oom: int | None = None
     error: int | None = None
     turn: Literal["player", "other_player"] = "player"
@@ -56,16 +57,14 @@ class Game:
                 player=player,
                 other_player=None,
                 id=_generate_game_id(),
-                problem=problem.description,
-                expected_oom=problem.oom,
+                problem=problem,
             )
 
         return Game(
             player=player,
             other_player=other_player,
             id=_generate_game_id(),
-            problem=problem.description,
-            expected_oom=problem.oom,
+            problem=problem,
         )
 
     def get_number_of_players(self) -> int:
@@ -89,23 +88,10 @@ class Game:
     def is_estimator(self, username: str) -> bool:
         assert isinstance(username, str)
 
-        if self.get_number_of_players() == 0:
-            raise ValueError("Game has no players!")
-
-        if self.get_number_of_players() == 1:
-            raise ValueError("Game is waiting for another player!")
-
-        assert self.get_number_of_players() == 2
-        assert self.player is not None
-        assert self.other_player is not None
-
-        if username not in [self.player.username, self.other_player.username]:
-            raise ValueError("Username not found in game!")
-
-        if self.estimator == "player" and self.player.username == username:
+        if self.player is not None and self.player.username == username and self.estimator == "player":
             return True
 
-        if self.estimator == "other_player" and self.other_player.username == username:
+        if self.other_player is not None and self.other_player.username == username and self.estimator == "other_player":
             return True
 
         return False
@@ -113,19 +99,6 @@ class Game:
     def is_winner(self, username: str) -> bool:
         assert isinstance(username, str)
 
-        if self.get_number_of_players() == 0:
-            raise ValueError("Game has no players!")
-
-        if self.get_number_of_players() == 1:
-            raise ValueError("Game is waiting for another player!")
-
-        assert self.get_number_of_players() == 2
-        assert self.player is not None
-        assert self.other_player is not None
-
-        if username not in [self.player.username, self.other_player.username]:
-            raise ValueError("Username not found in game!")
-        
         payout = self.get_payout()
 
         if self.is_estimator(username) and payout > 0:
@@ -156,7 +129,7 @@ class Game:
         if self.other_player is not None and self.other_player.username == username:
             return self.other_player
 
-        raise ValueError("Username not found in game!")
+        raise ValueError(f"Username '{username}' not found in game!")
 
     def remove_player(self, username: str) -> "Game":
         """Removes a player from the game."""
@@ -179,6 +152,7 @@ class Game:
             turn=new_estimator,
             actual_oom=None,
             error=None,
+            problem=_generate_problem(),
         )
     
     def switch_turns(self) -> "Game":
@@ -267,14 +241,14 @@ class Game:
         
         payout = self.get_payout()
         max_ante = max(self.ante, self.other_ante)
-
+        
         if self.turn == "player":
             new_player = replace(self.player, balance=self.player.balance + payout)
             new_other_player = replace(self.other_player, balance=self.other_player.balance - payout)
             return replace(self, player=new_player, other_player=new_other_player, ante=max_ante, other_ante=max_ante)
         
         new_player = replace(self.player, balance=self.player.balance - payout)
-        new_other_player = replace(self.other_player, balance=self.other_player.balance + payout, other_ante=self.ante)
+        new_other_player = replace(self.other_player, balance=self.other_player.balance + payout)
         return replace(self, player=new_player, other_player=new_other_player, ante=max_ante, other_ante=max_ante)
     
     def fold(self) -> "Game":
@@ -295,7 +269,7 @@ class Game:
         assert self.error is not None
 
         sign = 1 if self.actual_oom - self.error <= self.expected_oom <= self.actual_oom + self.error else -1
-
+    
         if self.error == 0:
             return sign * 8
         elif self.error == 1:
@@ -307,6 +281,19 @@ class Game:
         
         raise ValueError("Invalid error value!")
     
+    def reset(self) -> "Game":
+        new_problem = _generate_problem()
+
+        return Game(
+            player=None,
+            other_player=None,
+            id=self.id,
+            problem=new_problem,
+            turn=self.estimator,
+            estimator=self.estimator,
+        )
+    
+
 
 def is_valid_game_id(game_id: str) -> bool:
     if not isinstance(game_id, str):
@@ -336,7 +323,14 @@ def _generate_game_id():
     return "".join(letters)
 
 def _generate_problem() -> Problem:
+    df = pd.read_csv("problems.csv").sample(n=1)
+
+    question = df["question"].values[0]
+    answer = int(df["answer"].values[0].split("^")[-1])
+    source = df["source"].values[0]
+
     return Problem(
-        description="How many beats will your heart make in a lifetime?",
-        oom=9,
+        description=question,
+        answer=answer,
+        source=source,
     )
