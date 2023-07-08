@@ -6,7 +6,7 @@ from game import Player, Game, Problem, Prediction
 @pytest.fixture
 def example_player_one() -> Player:
     return Player(
-        username="test-player-one-id",
+        username="testplayeroneid",
         balance=10,
     )
 
@@ -14,7 +14,7 @@ def example_player_one() -> Player:
 @pytest.fixture
 def example_player_two() -> Player:
     return Player(
-        username="test-player-two-id",
+        username="testplayertwoid",
         balance=15,
     )
 
@@ -22,7 +22,7 @@ def example_player_two() -> Player:
 @pytest.fixture
 def example_player_three() -> Player:
     return Player(
-        username="test-player-three-id",
+        username="testplayerthreeid",
         balance=20,
     )
 
@@ -98,6 +98,16 @@ def test_no_more_than_two_players_can_join_game(
     with pytest.raises(ValueError):
         game_with_one_player.join(example_player_three.username)
 
+def test_player_must_have_valid_username(empty_game: Game) -> None:
+    # Given / When
+    with pytest.raises(ValueError):
+        empty_game.join("")
+
+    with pytest.raises(ValueError):
+        empty_game.join(" ")
+
+    with pytest.raises(ValueError):
+        empty_game.join(1)  # type: ignore
 
 def test_player_can_leave_game(empty_game: Game, example_player_one: Player) -> None:
     # Given
@@ -366,24 +376,6 @@ def test_error_is_thrown_when_setting_ante_to_non_positive_number(
     with pytest.raises(ValueError):
         game_with_two_players.set_ante(example_player_one.username, -10)
 
-
-# def test_that_players_ante_is_deleted_when_player_leaves_game(
-#     empty_game: Game, example_player_one: Player, example_player_two: Player
-# ) -> None:
-#     # Given
-#     player_one_ante = 100
-#     game_with_ante = (
-#         empty_game.join(example_player_one.username)
-#         .join(example_player_two.username)
-#         .set_ante(example_player_one.username, player_one_ante)
-#     )
-
-#     # When
-#     game_with_one_player = game_with_ante.leave(example_player_one.username)
-
-#     # Then
-#     assert example_player_one.username in game_with_ante.get_antes()
-#     assert example_player_one.username not in game_with_one_player.get_antes()
 
 
 def test_that_player_can_raise_the_ante(
@@ -660,28 +652,6 @@ def test_error_is_thrown_when_getting_ante_of_player_that_hasnt_placed_ante(
         game.get_ante(example_player_one.username)
 
 
-# def test_that_estimator_is_winner_when_prediction_is_correct(
-#     empty_game: Game,
-#     example_correct_prediction: Prediction,
-#     example_player_one: Player,
-#     example_player_two: Player,
-# ) -> None:
-#     # Given
-#     game = (
-#         empty_game.join(example_player_one.username)
-#         .join(example_player_two.username)
-#         .set_estimator(example_player_one.username)
-#         .set_prediction(example_correct_prediction)
-#         .set_ante(example_player_one.username, 5)
-#         .set_ante(example_player_two.username, 0)
-#         .call_ante(example_player_two.username)
-#     )
-
-#     # When
-#     new_game = game.set_prediction(example_correct_prediction)
-
-#     # Then
-#     assert new_game.is_winner(example_player_one.username)
 
 
 def test_has_winner_is_true_when_estimator_has_submitted_answer(
@@ -857,3 +827,49 @@ def test_starting_new_round_generates_game_with_unset_game_state(
 
     assert len(game.get_folded_players()) == 0
     assert len(new_game.get_folded_players()) == 0
+
+def test_switch_turns_changes_current_player_to_opponent(
+    empty_game: Game,
+    example_correct_prediction: Prediction,
+    example_player_one: Player,
+    example_player_two: Player,
+) -> None:
+    # Given
+    game = (
+        empty_game.join(example_player_one.username)
+        .join(example_player_two.username)
+        .set_estimator(example_player_one.username)
+        .set_prediction(example_correct_prediction)
+        .set_ante(example_player_one.username, 5)
+        .set_ante(example_player_two.username, 0)
+        .call_ante(example_player_two.username)
+        .set_current_player(example_player_one.username)
+    )
+
+    # When
+    new_game = game.switch_turns()
+
+    # Then
+    assert game.get_current_player() == example_player_one.username
+    assert new_game.get_current_player() == example_player_two.username
+
+def test_error_is_thrown_when_switching_turns_without_current_player(
+    empty_game: Game,
+    example_correct_prediction: Prediction,
+    example_player_one: Player,
+    example_player_two: Player,
+) -> None:
+    # Given
+    game = (
+        empty_game.join(example_player_one.username)
+        .join(example_player_two.username)
+        .set_estimator(example_player_one.username)
+        .set_prediction(example_correct_prediction)
+        .set_ante(example_player_one.username, 5)
+        .set_ante(example_player_two.username, 0)
+        .call_ante(example_player_two.username)
+    )
+
+    # When / Then
+    with pytest.raises(ValueError):
+        game.switch_turns()

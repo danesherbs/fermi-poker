@@ -1,6 +1,7 @@
 import random
 import pandas as pd
 import dataclasses
+import uuid
 
 from dataclasses import dataclass, replace
 from typing import Literal
@@ -36,7 +37,7 @@ class Prediction:
 @dataclass(frozen=True)
 class Player:
     username: str
-    balance: float
+    balance: int
 
     @staticmethod
     def create(username: str) -> "Player":
@@ -56,14 +57,25 @@ class Game:
     current_player: str | None
     antes: dict[str, int]
     folded_players: set[str] = dataclasses.field(default_factory=set)
-    # actual_oom: int | None = None
-    # error: int | None = None
-    # turn: Literal["player", "other_player"] = "player"
-    # estimator: Literal["player", "other_player"] = "player"
-    # ante: int = 1
-    # other_ante: int = 0
+
+    @staticmethod
+    def create() -> "Game":
+        return Game(
+            id=_generate_game_id(),
+            usernames=set(),
+            problem=_generate_problem(),
+            estimator=None,
+            prediction=None,
+            current_player=None,
+            antes={},
+        )
 
     def join(self, username: str) -> "Game":
+        if not is_valid_username(username):
+            raise ValueError(
+                "Username must be a non-empty string of alphabetical characters!"
+            )
+
         new_usernames = set([*self.usernames, username])
 
         if len(new_usernames) > 2:
@@ -131,6 +143,9 @@ class Game:
 
     def get_current_player(self) -> str | None:
         return self.current_player
+
+    def is_current_player(self, username: str) -> bool:
+        return self.get_current_player() == username
 
     def get_opponent(self, username: str) -> str:
         if not isinstance(username, str):
@@ -236,7 +251,7 @@ class Game:
             )
 
         return username in self.folded_players
-    
+
     def get_folded_players(self) -> set[str]:
         return self.folded_players
 
@@ -286,11 +301,8 @@ class Game:
             return LOG_ERROR_TO_PAYOUT[prediction.log_error]
 
         return -LOG_ERROR_TO_PAYOUT[prediction.log_error]
-    
-    def start_new_round(self, new_problem: Problem) -> "Game":
-        # if not self.has_winner():
-        #     raise ValueError("Can't start a new round if there is no winner!")
 
+    def start_new_round(self, new_problem: Problem) -> "Game":
         return Game(
             id=self.id,
             usernames=self.usernames,
@@ -301,295 +313,17 @@ class Game:
             antes=dict(),
             folded_players=set(),
         )
-    
+
     def get_problem(self) -> Problem:
         return self.problem
 
-    # def __post_init__(self) -> None:
-    #     if (
-    #         self.player_one is not None
-    #         and self.player_two is not None
-    #         and self.player_one.username == self.player_two.username
-    #     ):
-    #         raise ValueError("Player can't play against themselves!")
+    def switch_turns(self) -> "Game":
+        if self.current_player is None:
+            raise ValueError("Can't switch turns if there is no current player!")
 
-    # @staticmethod
-    # def create(player: Player, other_player: Player | None) -> "Game":
-    #     assert isinstance(player, Player)
-    #     assert isinstance(other_player, Player) or other_player is None
+        new_current_player = self.get_opponent(self.current_player)
 
-    #     problem = _generate_problem()
-
-    #     if other_player is None:
-    #         return Game(
-    #             player_one=player,
-    #             player_two=None,
-    #             id=_generate_game_id(),
-    #             problem=problem,
-    #         )
-
-    #     return Game(
-    #         player_one=player,
-    #         player_two=other_player,
-    #         id=_generate_game_id(),
-    #         problem=problem,
-    #     )
-
-    #     if self.player_one is None or self.player_two is None:
-    #         return 1
-
-    #     return 2
-
-    # def get_turn(self) -> Player:
-    #     if self.player_one is not None and self.turn == "player":
-    #         return self.player_one
-
-    #     if self.player_two is not None and self.turn == "other_player":
-    #         return self.player_two
-
-    #     raise ValueError("Tried to get turn of game but game has no players!")
-
-    # def is_estimator(self, username: str) -> bool:
-    #     assert isinstance(username, str)
-
-    #     if (
-    #         self.player_one is not None
-    #         and self.player_one.username == username
-    #         and self.estimator == "player"
-    #     ):
-    #         return True
-
-    #     if (
-    #         self.player_two is not None
-    #         and self.player_two.username == username
-    #         and self.estimator == "other_player"
-    #     ):
-    #         return True
-
-    #     return False
-
-    # def is_winner(self, username: str) -> bool:
-    #     assert isinstance(username, str)
-
-    #     payout = self.get_payout()
-
-    #     if self.is_estimator(username) and payout > 0:
-    #         return True
-
-    #     if not self.is_estimator(username) and payout < 0:
-    #         return True
-
-    #     return False
-
-    # def add_player(self, player: Player) -> "Game":
-    #     assert isinstance(player, Player)
-
-    #     if self.player_one is None:
-    #         return replace(self, player=player)
-
-    #     if self.player_two is None:
-    #         return replace(self, other_player=player)
-
-    #     raise ValueError("Can't add another player since the game is full!")
-
-    # def get_player(self, username: str) -> Player:
-    #     assert isinstance(username, str)
-
-    #     if self.player_one is not None and self.player_one.username == username:
-    #         return self.player_one
-
-    #     if self.player_two is not None and self.player_two.username == username:
-    #         return self.player_two
-
-    #     raise ValueError(f"Username '{username}' not found in game!")
-
-    # def remove_player(self, username: str) -> "Game":
-    #     """Removes a player from the game."""
-    #     assert isinstance(username, str)
-
-    #     if self.player_one is not None and self.player_one.username == username:
-    #         return replace(self, player=None)
-
-    #     if self.player_two is not None and self.player_two.username == username:
-    #         return replace(self, other_player=None)
-
-    #     raise ValueError("Username not found in game!")
-
-    # def swtich_estimator(self) -> "Game":
-    #     new_estimator = "player" if self.estimator == "other_player" else "other_player"
-
-    #     return replace(
-    #         self,
-    #         estimator=new_estimator,
-    #         turn=new_estimator,
-    #         actual_oom=None,
-    #         error=None,
-    #         problem=_generate_problem(),
-    #     )
-
-    # def switch_turns(self) -> "Game":
-    #     new_turn = "player" if self.turn == "other_player" else "other_player"
-
-    #     return replace(self, turn=new_turn)
-
-    # def kick_players(self) -> "Game":
-    #     """Kicks all players from the game."""
-    #     return replace(self, player=None, other_player=None)
-
-    # def set_estimate(self, actual_oom: int) -> "Game":
-    #     assert isinstance(actual_oom, int)
-
-    #     return replace(self, actual_oom=actual_oom)
-
-    # def get_estimate(self) -> int | None:
-    #     return self.actual_oom
-
-    # def set_error(self, error: int) -> "Game":
-    #     assert isinstance(error, int)
-
-    #     return replace(self, error=error)
-
-    # def get_error(self) -> int | None:
-    #     return self.error
-
-    # def is_players_turn(self, username: str) -> bool:
-    #     assert isinstance(username, str)
-
-    #     player = self.get_player(username)
-
-    #     if (
-    #         self.player_one is not None
-    #         and player.username == self.player_one.username
-    #         and self.turn == "player"
-    #     ):
-    #         return True
-
-    #     if (
-    #         self.player_two is not None
-    #         and player.username == self.player_two.username
-    #         and self.turn == "other_player"
-    #     ):
-    #         return True
-
-    #     return False
-
-    # def get_opponent(self, username: str) -> Player | None:
-    #     assert isinstance(username, str)
-
-    #     if self.player_one is not None and self.player_one.username == username:
-    #         return self.player_two
-
-    #     if self.player_two is not None and self.player_two.username == username:
-    #         return self.player_one
-
-    #     raise ValueError("Username not found in game!")
-
-    # def get_ante(self, username: str) -> int:
-    #     assert isinstance(username, str)
-
-    #     if self.player_one is not None and self.player_one.username == username:
-    #         return self.ante
-
-    #     if self.player_two is not None and self.player_two.username == username:
-    #         return self.other_ante
-
-    #     raise ValueError("Username not found in game!")
-
-    # def raise_ante(self) -> "Game":
-    #     if self.player_one is None or self.player_two is None:
-    #         raise ValueError("Game has no players!")
-
-    #     if self.turn == "player":
-    #         return replace(self, ante=self.other_ante + 1)
-
-    #     return replace(self, other_ante=self.ante + 1)
-
-    # def call_ante(self) -> "Game":
-    #     if self.player_one is None or self.player_two is None:
-    #         raise ValueError("Game has no players!")
-
-    #     if self.actual_oom is None or self.error is None:
-    #         raise ValueError("Game has no estimate or error!")
-
-    #     payout = self.get_payout()
-    #     max_ante = max(self.ante, self.other_ante)
-
-    #     if self.turn == "player":
-    #         new_player = replace(self.player_one, balance=self.player_one.balance + payout)
-    #         new_other_player = replace(
-    #             self.player_two, balance=self.player_two.balance - payout
-    #         )
-    #         return replace(
-    #             self,
-    #             player=new_player,
-    #             other_player=new_other_player,
-    #             ante=max_ante,
-    #             other_ante=max_ante,
-    #         )
-
-    #     new_player = replace(self.player_one, balance=self.player_one.balance - payout)
-    #     new_other_player = replace(
-    #         self.player_two, balance=self.player_two.balance + payout
-    #     )
-    #     return replace(
-    #         self,
-    #         player=new_player,
-    #         other_player=new_other_player,
-    #         ante=max_ante,
-    #         other_ante=max_ante,
-    #     )
-
-    # def fold(self) -> "Game":
-    #     if self.player_one is None or self.player_two is None:
-    #         raise ValueError("Game has no players!")
-
-    #     if self.turn == "player":
-    #         new_player = replace(self.player_one, balance=self.player_one.balance - self.ante)
-    #         new_other_player = replace(
-    #             self.player_two, balance=self.player_two.balance + self.ante
-    #         )
-    #         return replace(self, player=new_player, other_player=new_other_player)
-
-    #     new_player = replace(self.player_one, balance=self.player_one.balance + self.other_ante)
-    #     new_other_player = replace(
-    #         self.player_two, balance=self.player_two.balance - self.other_ante
-    #     )
-    #     return replace(self, player=new_player, other_player=new_other_player)
-
-    # def get_payout(self) -> int:
-    #     assert self.actual_oom is not None
-    #     assert self.error is not None
-
-    #     sign = (
-    #         1
-    #         if self.actual_oom - self.error
-    #         <= self.expected_oom
-    #         <= self.actual_oom + self.error
-    #         else -1
-    #     )
-
-    #     if self.error == 0:
-    #         return sign * 8
-    #     elif self.error == 1:
-    #         return sign * 5
-    #     elif self.error == 2:
-    #         return sign * 2
-    #     elif self.error == 3:
-    #         return sign * 1
-
-    #     raise ValueError("Invalid error value!")
-
-    # def reset(self) -> "Game":
-    #     new_problem = _generate_problem()
-
-    #     return Game(
-    #         player_one=None,
-    #         player_two=None,
-    #         id=self.id,
-    #         problem=new_problem,
-    #         turn=self.estimator,
-    #         estimator=self.estimator,
-    #     )
+        return replace(self, current_player=new_current_player)
 
 
 def is_valid_game_id(game_id: str) -> bool:
@@ -610,6 +344,9 @@ def is_valid_username(username: str) -> bool:
         return False
 
     if len(username) == 0:
+        return False
+
+    if not username.isalpha():
         return False
 
     return True
