@@ -1,8 +1,16 @@
 import random
 import pandas as pd
+import dataclasses
 
 from dataclasses import dataclass, replace
 from typing import Literal
+
+LOG_ERROR_TO_PAYOUT = {
+    0: 8,
+    1: 5,
+    2: 2,
+    3: 1,
+}
 
 
 @dataclass(frozen=True)
@@ -16,6 +24,13 @@ class Problem:
 class Prediction:
     log_answer: int
     log_error: int
+
+    def __post_init__(self):
+        if self.log_error < 0:
+            raise ValueError("Log error must be non-negative!")
+
+        if self.log_error > 3:
+            raise ValueError("Log error must be less than 4!")
 
 
 @dataclass(frozen=True)
@@ -40,6 +55,7 @@ class Game:
     prediction: Prediction | None
     current_player: str | None
     antes: dict[str, int]
+    folded_players: set[str] = dataclasses.field(default_factory=set)
     # actual_oom: int | None = None
     # error: int | None = None
     # turn: Literal["player", "other_player"] = "player"
@@ -62,9 +78,14 @@ class Game:
         if username not in self.usernames:
             raise ValueError("Can't remove player since they aren't in the game!")
 
+        if username in self.antes:
+            raise ValueError("Can't remove player since they have placed an ante!")
+
         new_usernames = set(user for user in self.usernames if user != username)
-        new_antes = {user: ante for user, ante in self.antes.items() if user != username}
-        
+        new_antes = {
+            user: ante for user, ante in self.antes.items() if user != username
+        }
+
         return replace(self, usernames=new_usernames, antes=new_antes)
 
     def get_num_players(self) -> int:
@@ -81,10 +102,13 @@ class Game:
             raise ValueError("Can't set estimator to a player that's not in the game!")
 
         return replace(self, estimator=username)
-    
+
     def get_estimator(self) -> str | None:
         return self.estimator
-    
+
+    def is_estimator(self, username: str) -> bool:
+        return self.estimator == username
+
     def is_ready_to_start(self) -> bool:
         return self.is_full() and self.estimator is not None
 
@@ -137,7 +161,10 @@ class Game:
         if username not in self.usernames:
             raise ValueError("Can't set ante of a player that's not in the game!")
 
-        if ante <= 0:
+        if self.has_folded(username):
+            raise ValueError("Can't set ante of a player who has folded!")
+
+        if ante < 0:
             raise ValueError("Ante must be non-negative!")
 
         new_antes = {**self.antes, username: ante}
@@ -148,33 +175,119 @@ class Game:
         if username not in self.usernames:
             raise ValueError("Can't get ante of a player that's not in the game!")
 
+        if username not in self.antes:
+            raise ValueError("Can't get ante of a player who has not placed an ante!")
+
         return self.antes[username]
-    
+
     def raise_ante(self, username: str) -> "Game":
         if username not in self.usernames:
             raise ValueError("Can't raise ante of a player that's not in the game!")
 
         opponent = self.get_opponent(username)
-        oppoenent_ante = self.antes[opponent]
-        new_antes = {**self.antes, username: oppoenent_ante + 1}
+        oppoenents_ante = self.get_ante(opponent)
+        new_game = self.set_ante(username, oppoenents_ante + 1)
 
-        if self.antes[username] >= new_antes[username]:
-            raise ValueError("Can't raise ante when opponent's ante is less than or equal to yours!")
+        if self.get_ante(username) >= new_game.get_ante(username):
+            raise ValueError(
+                "Can't raise ante when opponent's ante is less than or equal to yours!"
+            )
 
-        return replace(self, antes=new_antes)
+        return new_game
 
     def call_ante(self, username: str) -> "Game":
         if username not in self.usernames:
             raise ValueError("Can't call ante of a player that's not in the game!")
 
         opponent = self.get_opponent(username)
-        opponent_ante = self.antes[opponent]
-        new_antes = {**self.antes, username: opponent_ante}
+        oppoenents_ante = self.get_ante(opponent)
+        new_game = self.set_ante(username, oppoenents_ante)
 
-        if self.antes[username] >= new_antes[username]:
-            raise ValueError("Can't call ante when opponent's ante is less than or equal to yours!")
-        
-        return replace(self, antes=new_antes)    
+        if self.get_ante(username) >= new_game.get_ante(username):
+            raise ValueError(
+                "Can't call ante when opponent's ante is less than or equal to yours!"
+            )
+
+        return new_game
+
+    def has_called_ante(self, username: str) -> bool:
+        if username not in self.usernames:
+            raise ValueError(
+                "Can't check if a player that's not in the game has called!"
+            )
+
+        return self.get_ante(username) == max(self.antes.values())
+
+    def fold(self, username: str) -> "Game":
+        if username not in self.usernames:
+            raise ValueError("Can't fold a player that's not in the game!")
+
+        if self.has_folded(username):
+            raise ValueError("Can't fold a player who has already folded!")
+
+        new_folded_players = set([*self.folded_players, username])
+
+        return replace(self, folded_players=new_folded_players)
+
+    def has_folded(self, username: str) -> bool:
+        if username not in self.usernames:
+            raise ValueError(
+                "Can't check if a player that's not in the game has folded!"
+            )
+
+        return username in self.folded_players
+
+    def has_winner(self) -> bool:
+        if self.prediction is None:
+            return False
+
+        return True
+
+    def is_winner(self, username: str) -> bool:
+        if username not in self.usernames:
+            raise ValueError("Can't check if a player that's not in the game has won!")
+
+        if not self.has_winner():
+            return False
+
+        if self.is_estimator(username) and self.is_prediction_correct():
+            return True
+
+        if not self.is_estimator(username) and not self.is_prediction_correct():
+            return True
+
+        return False
+
+    def is_prediction_correct(self) -> bool:
+        if self.prediction is None:
+            raise ValueError(
+                "Can't check if a prediction is correct if there is no prediction!"
+            )
+
+        return (
+            self.prediction.log_answer - self.prediction.log_error
+            <= self.problem.log_answer
+            <= self.prediction.log_answer + self.prediction.log_error
+        )
+
+    def get_payout(self, username: str) -> int:
+        if username not in self.usernames:
+            raise ValueError("Can't get payout of a player that's not in the game!")
+
+        prediction = self.get_prediction()
+
+        if prediction is None:
+            raise ValueError("Can't get payout if there is no prediction!")
+
+        if prediction.log_error not in LOG_ERROR_TO_PAYOUT:
+            raise ValueError(
+                f"Expected log error to be between 0 and 3 but got {prediction.log_error}!"
+            )
+
+        if self.is_winner(username):
+            return LOG_ERROR_TO_PAYOUT[prediction.log_error]
+
+        return -LOG_ERROR_TO_PAYOUT[prediction.log_error]
 
     # def __post_init__(self) -> None:
     #     if (
