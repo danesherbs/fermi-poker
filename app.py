@@ -48,14 +48,14 @@ def start_game(game_id: str) -> str:
             "estimator.html",
             game_id=game_id,
             balance=player.balance,
-            problem=game.problem.description,
+            problem=game.problem.question,
         )
-    
+
     return render_template(
         "estimatee.html",
         game_id=game_id,
         balance=player.balance,
-        problem=game.problem.description,
+        problem=game.problem.question,
     )
 
 
@@ -152,7 +152,7 @@ def show_outcome(game_id: str) -> str:
         assert estimate is not None
         assert error is not None
 
-        expected_oom = game.problem.answer
+        expected_oom = game.problem.log_answer
         payout = game.get_payout()
         you_won = game.is_winner(username)
 
@@ -318,8 +318,8 @@ def fold() -> Response:
     
     try:
         tmp_game = game.fold()
-        new_player = tmp_game.player
-        new_other_player = tmp_game.other_player
+        new_player = tmp_game.player_one
+        new_other_player = tmp_game.player_two
         new_game = tmp_game.swtich_estimator().kick_players()
     except ValueError as e:
         return jsonify({"error": str(e)})
@@ -378,11 +378,11 @@ def call_ante() -> Response:
     new_game = game.call_ante()
     games[game_id] = new_game
 
-    assert game.player is not None
-    players[game.player.username] = game.player
+    assert game.player_one is not None
+    players[game.player_one.username] = game.player_one
 
-    assert game.other_player is not None
-    players[game.other_player.username] = game.other_player
+    assert game.player_two is not None
+    players[game.player_two.username] = game.player_two
 
     return jsonify({"success": True, "message": "Successfully called"})
 
