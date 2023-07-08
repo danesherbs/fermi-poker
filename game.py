@@ -11,10 +11,12 @@ class Problem:
     log_answer: int
     source: str
 
+
 @dataclass(frozen=True)
 class Prediction:
     log_answer: int
     log_error: int
+
 
 @dataclass(frozen=True)
 class Player:
@@ -60,10 +62,10 @@ class Game:
         if username not in self.usernames:
             raise ValueError("Can't remove player since they aren't in the game!")
 
-        new_usernames = self.usernames.copy()
-        new_usernames.remove(username)
-
-        return replace(self, usernames=new_usernames)
+        new_usernames = set(user for user in self.usernames if user != username)
+        new_antes = {user: ante for user, ante in self.antes.items() if user != username}
+        
+        return replace(self, usernames=new_usernames, antes=new_antes)
 
     def get_num_players(self) -> int:
         return len(self.usernames)
@@ -79,7 +81,10 @@ class Game:
             raise ValueError("Can't set estimator to a player that's not in the game!")
 
         return replace(self, estimator=username)
-
+    
+    def get_estimator(self) -> str | None:
+        return self.estimator
+    
     def is_ready_to_start(self) -> bool:
         return self.is_full() and self.estimator is not None
 
@@ -88,43 +93,47 @@ class Game:
 
     def set_prediction(self, prediction: Prediction | None) -> "Game":
         return replace(self, prediction=prediction)
-    
+
     def has_prediction(self) -> bool:
         return self.prediction is not None
-    
+
     def set_current_player(self, username: str | None) -> "Game":
         if username is not None and username not in self.usernames:
-            raise ValueError("Can't set current player to a player that's not in the game!")
+            raise ValueError(
+                "Can't set current player to a player that's not in the game!"
+            )
 
         return replace(self, current_player=username)
-    
+
     def get_current_player(self) -> str | None:
         return self.current_player
-    
+
     def get_opponent(self, username: str) -> str:
         if not isinstance(username, str):
             raise TypeError("Username must be a string!")
 
         if username not in self.usernames:
             raise ValueError("Can't get opponent of a player that's not in the game!")
-        
+
         if len(self.usernames) != 2:
-            raise ValueError("Can't get opponent of a player in a game with less than 2 players!")
+            raise ValueError(
+                "Can't get opponent of a player in a game with less than 2 players!"
+            )
 
         username_list = list(self.usernames)
-    
+
         if username == username_list[0]:
             return username_list[1]
 
         return username_list[0]
-    
+
     def get_antes(self) -> dict[str, int]:
         return self.antes
-    
+
     def set_ante(self, username: str, ante: int) -> "Game":
         assert isinstance(username, str)
         assert isinstance(ante, int)
-        
+
         if username not in self.usernames:
             raise ValueError("Can't set ante of a player that's not in the game!")
 
@@ -132,13 +141,40 @@ class Game:
             raise ValueError("Ante must be non-negative!")
 
         new_antes = {**self.antes, username: ante}
+
         return replace(self, antes=new_antes)
-    
+
     def get_ante(self, username: str) -> int:
         if username not in self.usernames:
             raise ValueError("Can't get ante of a player that's not in the game!")
-        
+
         return self.antes[username]
+    
+    def raise_ante(self, username: str) -> "Game":
+        if username not in self.usernames:
+            raise ValueError("Can't raise ante of a player that's not in the game!")
+
+        opponent = self.get_opponent(username)
+        oppoenent_ante = self.antes[opponent]
+        new_antes = {**self.antes, username: oppoenent_ante + 1}
+
+        if self.antes[username] >= new_antes[username]:
+            raise ValueError("Can't raise ante when opponent's ante is less than or equal to yours!")
+
+        return replace(self, antes=new_antes)
+
+    def call_ante(self, username: str) -> "Game":
+        if username not in self.usernames:
+            raise ValueError("Can't call ante of a player that's not in the game!")
+
+        opponent = self.get_opponent(username)
+        opponent_ante = self.antes[opponent]
+        new_antes = {**self.antes, username: opponent_ante}
+
+        if self.antes[username] >= new_antes[username]:
+            raise ValueError("Can't call ante when opponent's ante is less than or equal to yours!")
+        
+        return replace(self, antes=new_antes)    
 
     # def __post_init__(self) -> None:
     #     if (

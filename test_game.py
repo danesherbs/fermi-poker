@@ -163,6 +163,20 @@ def test_error_is_thrown_when_setting_estimator_to_player_not_in_game(
         empty_game.set_estimator(example_player_one.username)
 
 
+def test_can_get_the_estimator(empty_game: Game, example_player_one: Player) -> None:
+    # Given
+    game_with_one_player = empty_game.join(example_player_one.username)
+    game_with_estimator = game_with_one_player.set_estimator(
+        example_player_one.username
+    )
+
+    # When
+    estimator = game_with_estimator.get_estimator()
+
+    # Then
+    assert estimator == example_player_one.username
+
+
 def test_can_get_whether_or_not_game_is_ready_to_start(
     empty_game: Game, example_player_one: Player, example_player_two: Player
 ) -> None:
@@ -277,6 +291,7 @@ def test_error_is_thrown_when_getting_opponent_of_player_with_one_player(
     with pytest.raises(ValueError):
         game_with_one_player.get_opponent(example_player_one.username)
 
+
 def test_can_set_ante_of_player(
     empty_game: Game, example_player_one: Player, example_player_two: Player
 ) -> None:
@@ -286,11 +301,12 @@ def test_can_set_ante_of_player(
     )
     ante = 100
 
-    # When  
+    # When
     new_game = game_with_two_players.set_ante(example_player_one.username, ante)
 
     # Then
     assert new_game.get_ante(example_player_one.username) == ante
+
 
 def test_error_is_thrown_when_getting_ante_of_player_not_in_game(
     empty_game: Game, example_player_one: Player
@@ -298,6 +314,7 @@ def test_error_is_thrown_when_getting_ante_of_player_not_in_game(
     # Given / When
     with pytest.raises(ValueError):
         empty_game.get_ante(example_player_one.username)
+
 
 def test_error_is_thrown_when_setting_ante_of_player_not_in_game(
     empty_game: Game, example_player_one: Player
@@ -315,21 +332,159 @@ def test_error_is_thrown_when_setting_ante_to_non_positive_number(
         example_player_two.username
     )
 
-    # When  
+    # When
     with pytest.raises(ValueError):
         game_with_two_players.set_ante(example_player_one.username, 0)
-    
+
     with pytest.raises(ValueError):
         game_with_two_players.set_ante(example_player_one.username, -10)
 
-# def test_can_get_whether_its_a_players_turn_or_not(
-#     empty_game: Game, example_player_one: Player, example_player_two: Player
-# ) -> None:
-#     # Given
-#     game_with_two_players = empty_game.join(example_player_one.username).join(
-#         example_player_two.username
-#     ).set_turn(example_player_one.username)
 
-#     # When / Then
-#     assert game_with_two_players.is_players_turn(example_player_one.username)
-#     assert not game_with_two_players.is_players_turn(example_player_two.username)
+def test_that_players_ante_is_deleted_when_player_leaves_game(
+    empty_game: Game, example_player_one: Player, example_player_two: Player
+) -> None:
+    # Given
+    player_one_ante = 100
+    game_with_ante = (
+        empty_game.join(example_player_one.username)
+        .join(example_player_two.username)
+        .set_ante(example_player_one.username, player_one_ante)
+    )
+
+    # When
+    game_with_one_player = game_with_ante.leave(example_player_one.username)
+
+    # Then
+    assert example_player_one.username in game_with_ante.get_antes()
+    assert example_player_one.username not in game_with_one_player.get_antes()
+
+
+def test_that_player_can_raise_the_ante(
+    empty_game: Game, example_player_one: Player, example_player_two: Player
+) -> None:
+    # Given
+    player_one_ante = 4
+    player_two_ante = 5
+    game_with_ante = (
+        empty_game.join(example_player_one.username)
+        .join(example_player_two.username)
+        .set_ante(example_player_one.username, player_one_ante)
+        .set_ante(example_player_two.username, player_two_ante)
+    )
+
+    # When
+    new_game = game_with_ante.raise_ante(example_player_one.username)
+
+    # Then
+    assert new_game.get_ante(example_player_one.username) == player_two_ante + 1
+    assert new_game.get_ante(example_player_two.username) == player_two_ante
+
+
+def test_error_is_thrown_when_raising_ante_of_player_not_in_game(
+    empty_game: Game,
+    example_player_one: Player,
+    example_player_two: Player,
+    example_player_three: Player,
+) -> None:
+    # Given
+    game = empty_game.join(example_player_one.username).join(
+        example_player_two.username
+    )
+
+    # When
+    with pytest.raises(ValueError):
+        game.raise_ante(example_player_three.username)
+
+
+def test_error_is_thrown_when_raising_ante_of_player_with_one_player(
+    empty_game: Game,
+    example_player_one: Player,
+) -> None:
+    # Given
+    game = empty_game.join(example_player_one.username)
+
+    # When
+    with pytest.raises(ValueError):
+        game.raise_ante(example_player_one.username)
+
+def test_player_can_call_ante(
+    empty_game: Game,
+    example_player_one: Player,
+    example_player_two: Player,
+) -> None:
+    # Given
+    player_one_ante = 4
+    player_two_ante = 5
+    game_with_ante = (
+        empty_game.join(example_player_one.username)
+        .join(example_player_two.username)
+        .set_ante(example_player_one.username, player_one_ante)
+        .set_ante(example_player_two.username, player_two_ante)
+    )
+
+    # When
+    new_game = game_with_ante.call_ante(example_player_one.username)
+
+    # Then
+    assert new_game.get_ante(example_player_one.username) == player_two_ante
+    assert new_game.get_ante(example_player_two.username) == player_two_ante
+
+def test_error_is_thrown_when_calling_ante_but_opponents_amount_is_lower(
+    empty_game: Game,
+    example_player_one: Player,
+    example_player_two: Player,
+) -> None:
+    # Given
+    player_one_ante = 4
+    player_two_ante = 5
+    game_with_ante = (
+        empty_game.join(example_player_one.username)
+        .join(example_player_two.username)
+        .set_ante(example_player_one.username, player_one_ante)
+        .set_ante(example_player_two.username, player_two_ante)
+    )
+
+    # When
+    with pytest.raises(ValueError):
+        game_with_ante.call_ante(example_player_two.username)
+
+def test_error_is_thrown_when_raising_ante_but_opponents_ante_is_lower_or_equal(
+    empty_game: Game,
+    example_player_one: Player,
+    example_player_two: Player,
+) -> None:
+    # Given
+    player_one_ante = 4
+    player_two_ante = 5
+    game_with_ante = (
+        empty_game.join(example_player_one.username)
+        .join(example_player_two.username)
+        .set_ante(example_player_one.username, player_one_ante)
+        .set_ante(example_player_two.username, player_two_ante)
+    )
+
+    # When
+    with pytest.raises(ValueError):
+        game_with_ante.raise_ante(example_player_two.username)
+
+def test_player_can_fold(
+    empty_game: Game,
+    example_player_one: Player,
+    example_player_two: Player,
+) -> None:
+    # Given
+    player_one_ante = 4
+    player_two_ante = 5
+    game_with_ante = (
+        empty_game.join(example_player_one.username)
+        .join(example_player_two.username)
+        .set_ante(example_player_one.username, player_one_ante)
+        .set_ante(example_player_two.username, player_two_ante)
+    )
+
+    # When
+    new_game = game_with_ante.fold(example_player_one.username)
+
+    # Then
+    assert new_game.get_ante(example_player_one.username) == 0
+    assert new_game.get_ante(example_player_two.username) == player_two_ante
