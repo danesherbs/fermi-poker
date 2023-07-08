@@ -1,3 +1,4 @@
+from dataclasses import asdict
 from flask import Flask, render_template, request, session, jsonify, Response
 from typing import Dict
 from game import Game, Player, is_valid_username, is_valid_game_id
@@ -126,7 +127,49 @@ def play_again(game_id: str) -> str:
 
     return render_template("play-again.html", game_id=game_id)
 
+@app.route("/game/<game_id>/outcome", methods=["GET"])
+def show_outcome(game_id: str) -> str:
+    if game_id not in games:
+        return render_template("error.html", message=f"Game ID doesn't exist!")
+    
+    username = session.get("username", None)
 
+    if username is None:
+        return render_template("error.html", message=f"User not logged in!")
+    
+    game = games[game_id]
+    player = game.get_player(username)
+    balance = player.balance
+    problem = game.problem
+    estimate = game.get_estimate()
+    error = game.get_error()
+    is_estimator = game.is_estimator(username)
+
+    assert estimate is not None
+    assert error is not None
+
+    opponent = game.get_opponent(username)
+    
+    assert opponent is not None
+
+    expected_oom = game.expected_oom
+    payout = game.get_payout()
+    you_won = game.is_winner(username)
+    
+    return render_template(
+        "outcome.html",
+        game_id=game_id,
+        balance=balance,
+        problem=problem,
+        estimate=estimate,
+        error=error,
+        is_estimator=is_estimator,
+        expected_oom=expected_oom,
+        payout=abs(payout),
+        you_won=you_won,
+    )
+
+    
 @app.route("/api/login", methods=["POST"])
 def login() -> Response:
     username = request.json["username"]  # type: ignore
@@ -262,9 +305,15 @@ def fold() -> Response:
     game = games[game_id]
 
     try:
-        new_game = game.swtich_estimator().kick_players()
+        new_game = game.fold().swtich_estimator().kick_players()
     except ValueError as e:
         return jsonify({"error": str(e)})
+
+    assert new_game.player is not None
+    players[new_game.player.username] = new_game.player
+
+    assert new_game.other_player is not None
+    players[new_game.other_player.username] = new_game.other_player
 
     games[game_id] = new_game
 
@@ -313,8 +362,15 @@ def call_ante() -> Response:
     game = games[game_id]
     new_game = game.call_ante().switch_turns()
     games[game_id] = new_game
-    
+
+    assert game.player is not None
+    players[game.player.username] = game.player
+
+    assert game.other_player is not None
+    players[game.other_player.username] = game.other_player
+
     return jsonify({"success": True, "message": "Successfully called"})
+
 
 @app.route("/api/game/<game_id>/is-your-turn", methods=["GET"])
 def get_is_my_turn(game_id: str) -> Response:
@@ -335,6 +391,21 @@ def get_is_my_turn(game_id: str) -> Response:
     is_your_turn = username == player.username
 
     return jsonify({"success": True, "is_your_turn": is_your_turn})
+
+@app.route("/api/game/<game_id>/has-called", methods=["GET"])
+def has_called(game_id: str) -> Response:
+    if game_id not in games:
+        return jsonify({"success": False, "message": "Game not found"})
+
+    game = games[game_id]
+    username = session.get("username", None)
+
+    if username is None:
+        return jsonify({"success": False, "message": "User not logged in"})
+    
+    has_called = game.ante == game.other_ante
+
+    return jsonify({"success": True, "has_called": has_called})
 
 
 if __name__ == "__main__":

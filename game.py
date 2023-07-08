@@ -5,6 +5,11 @@ from typing import Literal
 
 
 @dataclass(frozen=True)
+class Problem:
+    description: str
+    oom: int
+
+@dataclass(frozen=True)
 class Player:
     username: str
     balance: float
@@ -22,11 +27,13 @@ class Game:
     player: Player | None
     other_player: Player | None
     id: str
-    estimate: int | None = None
+    problem: str
+    expected_oom: int
+    actual_oom: int | None = None
     error: int | None = None
     turn: Literal["player", "other_player"] = "player"
     estimator: Literal["player", "other_player"] = "player"
-    ante: int = 0
+    ante: int = 1
     other_ante: int = 0
 
     def __post_init__(self) -> None:
@@ -42,17 +49,23 @@ class Game:
         assert isinstance(player, Player)
         assert isinstance(other_player, Player) or other_player is None
 
+        problem = _generate_problem()
+
         if other_player is None:
             return Game(
                 player=player,
                 other_player=None,
                 id=_generate_game_id(),
+                problem=problem.description,
+                expected_oom=problem.oom,
             )
 
         return Game(
             player=player,
             other_player=other_player,
             id=_generate_game_id(),
+            problem=problem.description,
+            expected_oom=problem.oom,
         )
 
     def get_number_of_players(self) -> int:
@@ -93,6 +106,32 @@ class Game:
             return True
 
         if self.estimator == "other_player" and self.other_player.username == username:
+            return True
+
+        return False
+    
+    def is_winner(self, username: str) -> bool:
+        assert isinstance(username, str)
+
+        if self.get_number_of_players() == 0:
+            raise ValueError("Game has no players!")
+
+        if self.get_number_of_players() == 1:
+            raise ValueError("Game is waiting for another player!")
+
+        assert self.get_number_of_players() == 2
+        assert self.player is not None
+        assert self.other_player is not None
+
+        if username not in [self.player.username, self.other_player.username]:
+            raise ValueError("Username not found in game!")
+        
+        payout = self.get_payout()
+
+        if self.is_estimator(username) and payout > 0:
+            return True
+
+        if not self.is_estimator(username) and payout < 0:
             return True
 
         return False
@@ -138,7 +177,7 @@ class Game:
             self,
             estimator=new_estimator,
             turn=new_estimator,
-            estimate=None,
+            actual_oom=None,
             error=None,
         )
     
@@ -151,13 +190,13 @@ class Game:
         """Kicks all players from the game."""
         return replace(self, player=None, other_player=None)
 
-    def set_estimate(self, estimate: int) -> "Game":
-        assert isinstance(estimate, int)
+    def set_estimate(self, actual_oom: int) -> "Game":
+        assert isinstance(actual_oom, int)
 
-        return replace(self, estimate=estimate)
+        return replace(self, actual_oom=actual_oom)
     
     def get_estimate(self) -> int | None:
-        return self.estimate
+        return self.actual_oom
 
     def set_error(self, error: int) -> "Game":
         assert isinstance(error, int)
@@ -215,19 +254,59 @@ class Game:
             raise ValueError("Game has no players!")
 
         if self.turn == "player":
-            return replace(self, ante=self.ante + 1)
+            return replace(self, ante=self.other_ante + 1)
         
-        return replace(self, other_ante=self.other_ante + 1)
+        return replace(self, other_ante=self.ante + 1)
     
     def call_ante(self) -> "Game":
         if self.player is None or self.other_player is None:
             raise ValueError("Game has no players!")
+        
+        if self.actual_oom is None or self.error is None:
+            raise ValueError("Game has no estimate or error!")
+        
+        payout = self.get_payout()
+        max_ante = max(self.ante, self.other_ante)
 
         if self.turn == "player":
-            return replace(self, ante=self.other_ante)
+            new_player = replace(self.player, balance=self.player.balance + payout)
+            new_other_player = replace(self.other_player, balance=self.other_player.balance - payout)
+            return replace(self, player=new_player, other_player=new_other_player, ante=max_ante, other_ante=max_ante)
         
-        return replace(self, other_ante=self.ante)
+        new_player = replace(self.player, balance=self.player.balance - payout)
+        new_other_player = replace(self.other_player, balance=self.other_player.balance + payout, other_ante=self.ante)
+        return replace(self, player=new_player, other_player=new_other_player, ante=max_ante, other_ante=max_ante)
+    
+    def fold(self) -> "Game":
+        if self.player is None or self.other_player is None:
+            raise ValueError("Game has no players!")
 
+        if self.turn == "player":
+            new_player = replace(self.player, balance=self.player.balance - self.ante)
+            new_other_player = replace(self.other_player, balance=self.other_player.balance + self.ante)
+            return replace(self, player=new_player, other_player=new_other_player)
+        
+        new_player = replace(self.player, balance=self.player.balance + self.other_ante)
+        new_other_player = replace(self.other_player, balance=self.other_player.balance - self.other_ante)
+        return replace(self, player=new_player, other_player=new_other_player)
+    
+    def get_payout(self) -> int:
+        assert self.actual_oom is not None
+        assert self.error is not None
+
+        sign = 1 if self.actual_oom - self.error <= self.expected_oom <= self.actual_oom + self.error else -1
+
+        if self.error == 0:
+            return sign * 8
+        elif self.error == 1:
+            return sign * 5
+        elif self.error == 2:
+            return sign * 2
+        elif self.error == 3:
+            return sign * 1
+        
+        raise ValueError("Invalid error value!")
+    
 
 def is_valid_game_id(game_id: str) -> bool:
     if not isinstance(game_id, str):
@@ -255,3 +334,9 @@ def is_valid_username(username: str) -> bool:
 def _generate_game_id():
     letters = random.sample("ABCDEFGHIJKLMNOPQRSTUVWXYZ", 5)
     return "".join(letters)
+
+def _generate_problem() -> Problem:
+    return Problem(
+        description="How many beats will your heart make in a lifetime?",
+        oom=9,
+    )

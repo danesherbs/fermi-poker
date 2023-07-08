@@ -106,9 +106,14 @@
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ game_id })
-        }).then(() => {
-            window.location.reload();
-        })
+        }).then(response => response.json())
+            .then((data) => {
+                if (!data.success) {
+                    console.error(data.message); return;
+                }
+
+                window.location.href = `/game/${game_id}/outcome`
+            })
     }
 
     const fold = () => {
@@ -152,11 +157,30 @@
             })
     }
 
+    const hasOpponentCalled = () => {
+        fetch(`/api/game/${game_id}/has-called`, { method: "GET" })
+            .then(response => response.json())
+            .then(data => {
+                if (!data.success) {
+                    clearInterval(foldedInterval);
+                    console.error(data.message); return;
+                }
+
+                console.log(data)
+
+                if (data.has_called) {
+                    clearInterval(foldedInterval);
+                    window.location.href = `/game/${game_id}/outcome`; return; // player folded but wants to play again
+                }
+            })
+    }
+
     const countdownInterval = setInterval(countdown, 1000);
     const foldedInterval = setInterval(hasOpponentFolded, 1000);
+    const calledInterval = setInterval(hasOpponentCalled, 1000);
 
     if (!is_your_turn) {
-        const turnsInterval = setInterval(isItMyTurnYet, 1000);
+        const turnsInterval = setInterval(isItMyTurnYet, 300);
     }
 </script>
 {% endblock %}
