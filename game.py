@@ -236,6 +236,9 @@ class Game:
             )
 
         return username in self.folded_players
+    
+    def get_folded_players(self) -> set[str]:
+        return self.folded_players
 
     def has_winner(self) -> bool:
         if self.prediction is None:
@@ -279,15 +282,28 @@ class Game:
         if prediction is None:
             raise ValueError("Can't get payout if there is no prediction!")
 
-        if prediction.log_error not in LOG_ERROR_TO_PAYOUT:
-            raise ValueError(
-                f"Expected log error to be between 0 and 3 but got {prediction.log_error}!"
-            )
-
         if self.is_winner(username):
             return LOG_ERROR_TO_PAYOUT[prediction.log_error]
 
         return -LOG_ERROR_TO_PAYOUT[prediction.log_error]
+    
+    def start_new_round(self, new_problem: Problem) -> "Game":
+        # if not self.has_winner():
+        #     raise ValueError("Can't start a new round if there is no winner!")
+
+        return Game(
+            id=self.id,
+            usernames=self.usernames,
+            problem=new_problem,
+            estimator=None,
+            prediction=None,
+            current_player=None,
+            antes=dict(),
+            folded_players=set(),
+        )
+    
+    def get_problem(self) -> Problem:
+        return self.problem
 
     # def __post_init__(self) -> None:
     #     if (

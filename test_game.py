@@ -35,6 +35,14 @@ def example_problem() -> Problem:
         source="https://my-made-up-source.com",
     )
 
+@pytest.fixture
+def example_other_problem() -> Problem:
+    return Problem(
+        question="How many times does a human heart beat in an average lifetime?",
+        log_answer=7,
+        source="https://my-other-made-up-source.com",
+    )
+
 
 @pytest.fixture
 def example_correct_prediction(example_problem: Problem) -> Prediction:
@@ -668,12 +676,13 @@ def test_error_is_thrown_when_getting_ante_of_player_that_hasnt_placed_ante(
 #         .set_ante(example_player_two.username, 0)
 #         .call_ante(example_player_two.username)
 #     )
-    
+
 #     # When
 #     new_game = game.set_prediction(example_correct_prediction)
 
 #     # Then
 #     assert new_game.is_winner(example_player_one.username)
+
 
 def test_has_winner_is_true_when_estimator_has_submitted_answer(
     empty_game: Game,
@@ -693,10 +702,11 @@ def test_has_winner_is_true_when_estimator_has_submitted_answer(
     )
 
     # When / Then
-    
+
     # Then
     assert not empty_game.has_winner()
     assert game.has_winner()
+
 
 def test_has_winner_is_false_when_estimator_has_not_submitted_answer(
     empty_game: Game,
@@ -714,6 +724,7 @@ def test_has_winner_is_false_when_estimator_has_not_submitted_answer(
     # When / Then
     assert not empty_game.has_winner()
     assert not game.has_winner()
+
 
 def test_is_winner_is_estimator_when_prediction_is_correct(
     empty_game: Game,
@@ -738,6 +749,7 @@ def test_is_winner_is_estimator_when_prediction_is_correct(
     assert game.is_winner(example_player_one.username)
     assert not game.is_winner(example_player_two.username)
 
+
 def test_is_winner_is_estimatee_when_prediction_is_incorrect(
     empty_game: Game,
     example_incorrect_prediction: Prediction,
@@ -761,6 +773,7 @@ def test_is_winner_is_estimatee_when_prediction_is_incorrect(
     assert not game.is_winner(example_player_one.username)
     assert game.is_winner(example_player_two.username)
 
+
 def test_get_payout_throws_an_error_when_the_game_has_no_winner(
     empty_game: Game,
     example_player_one: Player,
@@ -779,6 +792,7 @@ def test_get_payout_throws_an_error_when_the_game_has_no_winner(
     with pytest.raises(ValueError):
         game.get_payout(example_player_one.username)
 
+
 def test_error_is_thrown_when_getting_payout_of_non_existent_user(
     empty_game: Game,
     example_correct_prediction: Prediction,
@@ -796,9 +810,50 @@ def test_error_is_thrown_when_getting_payout_of_non_existent_user(
         .set_ante(example_player_two.username, 0)
         .call_ante(example_player_two.username)
     )
-    
+
     # When / Then
     assert game.has_winner()
 
     with pytest.raises(ValueError):
         game.get_payout(example_player_three.username)
+
+def test_starting_new_round_generates_game_with_unset_game_state(
+    empty_game: Game,
+    example_correct_prediction: Prediction,
+    example_player_one: Player,
+    example_player_two: Player,
+    example_other_problem: Problem,
+) -> None:
+    # Given
+    game = (
+        empty_game.join(example_player_one.username)
+        .join(example_player_two.username)
+        .set_estimator(example_player_one.username)
+        .set_prediction(example_correct_prediction)
+        .set_ante(example_player_one.username, 5)
+        .set_ante(example_player_two.username, 0)
+        .call_ante(example_player_two.username)
+        .set_current_player(example_player_one.username)
+    )
+
+    # When
+    new_game = game.start_new_round(example_other_problem)
+    
+    # Then
+    assert game.get_problem() != example_other_problem
+    assert new_game.get_problem() == example_other_problem
+    
+    assert game.get_estimator() == example_player_one.username
+    assert new_game.get_estimator() is None
+
+    assert game.get_prediction() == example_correct_prediction
+    assert new_game.get_prediction() is None
+
+    assert game.get_current_player() == example_player_one.username
+    assert new_game.get_current_player() is None
+
+    assert len(game.get_antes()) == 2
+    assert len(new_game.get_antes()) == 0
+
+    assert len(game.get_folded_players()) == 0
+    assert len(new_game.get_folded_players()) == 0
