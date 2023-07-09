@@ -35,11 +35,9 @@ def start_game(game_id: str) -> str:
         return render_template("error.html", message=f"User not logged in!")
 
     game = games[game_id]
-    
+
     if not game.is_ready_to_start():
-        return render_template(
-            "error.html", message=f"Game is not ready to start!"
-        )
+        return render_template("error.html", message=f"Game is not ready to start!")
 
     if username not in players:
         players[username] = Player.create(username)
@@ -90,38 +88,40 @@ def raise_call_or_fold(game_id: str) -> str:
 
     game = games[game_id]
 
-    player = game.get_player(username)
-    opponent = game.get_opponent(username)
-
-    if opponent is None:
+    if username not in players:
         return render_template(
-            "error.html",
-            message=f"Can't raise, call or fold until opponent joins!",
+            "error.html", message=f"Can't get outcome for non-existent user!"
         )
 
-    is_your_turn = game.is_players_turn(username)
-    problem = "How many beats will your heart make in a lifetime?"
-    is_estimator = game.is_estimator(username)
-    estimate = game.get_estimate()
-    error = game.get_error()
-    ante = game.get_ante(username)
-    opponents_ante = game.get_ante(opponent.username)
+    player = players[username]
 
-    if estimate is None or error is None:
+    if not game.has_prediction():
         return render_template(
-            "error.html",
-            message=f"Can't raise, call or fold until the estimate and error have been set!",
+            "error.html", message=f"Game hasn't registered a prediction yet!"
         )
+
+    try:
+        prediction = game.get_prediction()
+        actual_log_answer = prediction.log_answer  # type: ignore
+        actual_log_error = prediction.log_error  # type: ignore
+        problem = game.get_problem()
+        is_estimator = game.is_estimator(username)
+        is_your_turn = game.is_current_player(username)
+        opponent = game.get_opponent(username)
+        opponents_ante = game.get_ante(opponent)
+        your_ante = game.get_ante(username)
+    except ValueError as e:
+        return render_template("error.html", message=str(e))
 
     return render_template(
         "raise-call-or-fold.html",
         is_your_turn=is_your_turn,
         balance=player.balance,
-        problem=problem,
+        problem=problem.question,
         is_estimator=is_estimator,
-        estimate=estimate,
-        error=error,
-        ante=ante,
+        estimate=actual_log_answer,
+        error=actual_log_error,
+        ante=your_ante,
         opponents_ante=opponents_ante,
         game_id=game_id,
     )
@@ -134,76 +134,62 @@ def play_again(game_id: str) -> str:
 
     return render_template("play-again.html", game_id=game_id)
 
+
 @app.route("/game/<game_id>/outcome", methods=["GET"])
 def show_outcome(game_id: str) -> str:
     if game_id not in games:
         return render_template("error.html", message=f"Game ID doesn't exist!")
-    
+
     username = session.get("username", None)
 
     if username is None:
         return render_template("error.html", message=f"User not logged in!")
-    
+
     if username not in players:
-        return render_template("error.html", message=f"Can't get outcome for non-existent user!")
+        return render_template(
+            "error.html", message=f"Can't get outcome for non-existent user!"
+        )
 
     player = players[username]
     game = games[game_id]
 
-    balance = player.balance
+    if not game.has_winner():
+        return render_template("error.html", message=f"Game doesn't have a winner yet!")
 
-    prediction = game.get_prediction()
-    actual_log_answer = prediction.log_answer
-    actual_log_error = prediction.log_error
+    if not game.has_prediction():
+        return render_template(
+            "error.html", message=f"Game hasn't registered a prediction yet!"
+        )
 
-    problem = game.get_problem()
-    expected_log_answer = problem.log_answer
-    expected_log_error = problem.log_error
-
-    is_estimator = game.is_estimator(username)
-
-    payout = game.get_payout(username)
-
-    is_winner = game.is_winner(username)
-    
-    with lock:
-        game = games[game_id]
-        player = game.get_player(username)
+    try:
         balance = player.balance
-        problem = game.problem
-        estimate = game.get_estimate()
-        error = game.get_error()
+        prediction = game.get_prediction()
+        actual_log_answer = prediction.log_answer  # type: ignore
+        actual_log_error = prediction.log_error  # type: ignore
+        problem = game.get_problem()
+        question = problem.question
+        expected_log_answer = problem.log_answer
         is_estimator = game.is_estimator(username)
-
-        assert estimate is not None
-        assert error is not None
-
-        expected_oom = game.problem.log_answer
-        payout = game.get_payout()
-        you_won = game.is_winner(username)
-
-        new_game = game.remove_player(username)
-
-        if new_game.get_number_of_players() == 0:
-            new_game = new_game.reset().swtich_estimator()
-        
-        games[game_id] = new_game
+        payout = game.get_payout(username)
+        is_winner = game.is_winner(username)
+    except ValueError as e:
+        return render_template("error.html", message=str(e))
 
     return render_template(
         "outcome.html",
         game_id=game_id,
         balance=balance,
-        problem=problem,
-        estimate=estimate,
-        error=error,
+        problem=question,
+        estimate=actual_log_answer,
+        error=actual_log_error,
         is_estimator=is_estimator,
-        expected_oom=expected_oom,
+        expected_oom=expected_log_answer,
         payout=abs(payout),
-        you_won=you_won,
+        you_won=is_winner,
         source=game.problem.source,
     )
 
-    
+
 @app.route("/api/login", methods=["POST"])
 def login() -> Response:
     username = request.json["username"]  # type: ignore
@@ -250,9 +236,14 @@ def logout() -> Response:
 
 @app.route("/api/create", methods=["GET"])
 def create_game() -> Response:
-    game = Game.create()
+    username = session.get("username", None)
+
+    if username is None:
+        return jsonify({"success": False, "message": "User not logged in!"})
+
+    game = Game.create().join(username).set_estimator(username)
     games[game.id] = game
-    
+
     return jsonify(
         {
             "success": True,
@@ -284,7 +275,7 @@ def join_game() -> Response:
         new_game = game.join(player.username)
     except ValueError as e:
         return jsonify({"success": False, "message": str(e)})
-    
+
     games[game_id] = new_game
 
     return jsonify({"success": True, "message": f"Successfully joined game {game_id}"})
@@ -307,14 +298,14 @@ def fold() -> Response:
 
     if game_id not in games:
         return jsonify({"error": "Game not found"})
-    
+
     username = session.get("username", None)
 
     if username is None:
         return jsonify({"success": False, "message": "User not logged in"})
 
     game = games[game_id]
-    
+
     try:
         new_game = game.fold(username)
     except ValueError as e:
@@ -325,7 +316,7 @@ def fold() -> Response:
     return jsonify({"success": True, "message": "Successfully folded"})
 
 
-@app.route("/api/submit", methods=["POST"])
+@app.route("/api/set-prediction", methods=["POST"])
 def set_prediction() -> Response:
     game_id = request.json["game_id"]  # type: ignore
     log_answer = int(request.json["estimate"])  # type: ignore
@@ -333,20 +324,23 @@ def set_prediction() -> Response:
 
     if game_id not in games:
         return jsonify({"error": "Game not found"})
-    
+
     username = session.get("username", None)
 
     if username is None:
         return jsonify({"success": False, "message": "User not logged in"})
-    
+
     game = games[game_id]
     prediction = Prediction(
         log_answer=log_answer,
         log_error=log_error,
     )
-    
+
     try:
-        new_game = game.set_prediction(prediction)
+        opponent = game.get_opponent(username)
+        new_game = (
+            game.set_prediction(prediction).reset_antes().set_current_player(opponent)
+        )
     except ValueError as e:
         return jsonify({"success": False, "message": str(e)})
 
@@ -361,7 +355,7 @@ def raise_ante() -> Response:
 
     if game_id not in games:
         return jsonify({"error": "Game not found"})
-    
+
     username = session.get("username", None)
 
     if username is None:
@@ -370,10 +364,10 @@ def raise_ante() -> Response:
     game = games[game_id]
 
     try:
-        new_game = game.raise_ante(username)
+        new_game = game.raise_ante(username).switch_turns()
     except ValueError as e:
         return jsonify({"success": False, "message": str(e)})
-    
+
     games[game_id] = new_game
 
     return jsonify({"success": True, "message": "Successfully raised ante"})
@@ -385,7 +379,7 @@ def call_ante() -> Response:
 
     if game_id not in games:
         return jsonify({"error": "Game not found"})
-    
+
     username = session.get("username", None)
 
     if username is None:
@@ -397,7 +391,7 @@ def call_ante() -> Response:
         new_game = game.call_ante(username)
     except ValueError as e:
         return jsonify({"success": False, "message": str(e)})
-    
+
     games[game_id] = new_game
 
     return jsonify({"success": True, "message": "Successfully called ante"})
@@ -421,41 +415,64 @@ def get_is_my_turn(game_id: str) -> Response:
 
     return jsonify({"success": True, "is_your_turn": is_your_turn})
 
-@app.route("/api/game/<game_id>/has-called", methods=["GET"])
-def has_called(game_id: str) -> Response:
+
+@app.route("/api/game/<game_id>/has-opponent-called", methods=["GET"])
+def has_opponent_called(game_id: str) -> Response:
     if game_id not in games:
         return jsonify({"success": False, "message": "Game ID doesn't exist!"})
 
     game = games[game_id]
     username = session.get("username", None)
-    
+
     if username is None:
         return jsonify({"success": False, "message": "User not logged in!"})
-    
+
     try:
-        has_called = game.has_called_ante(username)
+        opponent = game.get_opponent(username)
+        has_called = game.has_called_ante(opponent)
     except ValueError as e:
         return jsonify({"success": False, "message": str(e)})
-
+    
     return jsonify({"success": True, "has_called": has_called})
 
-@app.route("/api/game/<game_id>/has-folded", methods=["GET"])
-def has_folded(game_id: str) -> Response:
+
+@app.route("/api/game/<game_id>/has-opponent-folded", methods=["GET"])
+def has_opponent_folded(game_id: str) -> Response:
     if game_id not in games:
         return jsonify({"success": False, "message": "Game ID doesn't exist!"})
 
     game = games[game_id]
     username = session.get("username", None)
-    
+
     if username is None:
         return jsonify({"success": False, "message": "User not logged in!"})
-    
+
     try:
-        has_folded = game.has_folded(username)
+        opponent = game.get_opponent(username)
+        has_folded = game.has_folded(opponent)
     except ValueError as e:
         return jsonify({"success": False, "message": str(e)})
-    
+
     return jsonify({"success": True, "has_folded": has_folded})
+
+
+@app.route("/api/game/<game_id>/is-ready-to-start", methods=["GET"])
+def is_ready_to_start(game_id: str) -> Response:
+    if game_id not in games:
+        return jsonify({"success": False, "message": "Game ID doesn't exist!"})
+
+    game = games[game_id]
+    username = session.get("username", None)
+
+    if username is None:
+        return jsonify({"success": False, "message": "User not logged in!"})
+
+    try:
+        is_ready_to_start = game.is_ready_to_start()
+    except ValueError as e:
+        return jsonify({"success": False, "message": str(e)})
+
+    return jsonify({"success": True, "is_ready_to_start": is_ready_to_start})
 
 
 if __name__ == "__main__":

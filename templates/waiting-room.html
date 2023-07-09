@@ -11,22 +11,18 @@
     const id = "{{ game_id }}";
 
     function start() {
-        fetch(`/api/game/${id}/number-of-players`)
+        fetch(`/api/game/${id}/is-ready-to-start`)
             .then(response => response.json())
             .then(data => {
                 if (!data.success) {
                     console.error(data.message); return;
                 }
 
-                if (data.number_of_players == 0) {
-                    window.location.href = "/"; // no ones here; go back to home page
+                if (data.is_ready_to_start) {
+                    window.location.href = "/game/{{ game_id }}"; return;
                 }
 
-                if (data.number_of_players == 1) {
-                    setTimeout(start, 1000); return; // still waiting
-                }
-
-                window.location.href = "/game/{{ game_id }}" // start game
+                setTimeout(start, 1000); return; // still waiting
             })
             .catch(error => console.error('Error:', error));
     }

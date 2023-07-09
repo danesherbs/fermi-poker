@@ -126,7 +126,7 @@
         })
     }
 
-    const isItMyTurnYet = () => {
+    const hasOpponentRaised = () => {
         fetch(`/api/game/${game_id}/is-your-turn`)
             .then(response => response.json())
             .then(data => {
@@ -137,7 +137,7 @@
     }
 
     const hasOpponentFolded = () => {
-        fetch(`/api/game/${game_id}/has-folded`, { method: "GET" })
+        fetch(`/api/game/${game_id}/has-opponent-folded`, { method: "GET" })
             .then(response => response.json())
             .then(data => {
                 if (!data.success) {
@@ -153,7 +153,7 @@
     }
 
     const hasOpponentCalled = () => {
-        fetch(`/api/game/${game_id}/has-called`, { method: "GET" })
+        fetch(`/api/game/${game_id}/has-opponent-called`, { method: "GET" })
             .then(response => response.json())
             .then(data => {
                 if (!data.success) {
@@ -173,7 +173,7 @@
     const calledInterval = setInterval(hasOpponentCalled, 1000);
 
     if (!is_your_turn) {
-        const turnsInterval = setInterval(isItMyTurnYet, 1000);
+        const turnsInterval = setInterval(hasOpponentRaised, 1000);
     }
 </script>
 {% endblock %}

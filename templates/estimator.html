@@ -85,7 +85,7 @@
         const estimate = document.getElementById("estimate").value;
         const error = document.getElementById("error").value;
 
-        fetch(`/api/submit`, {
+        fetch(`/api/set-prediction`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ game_id, estimate, error })

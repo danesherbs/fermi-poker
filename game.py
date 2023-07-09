@@ -1,10 +1,8 @@
 import random
 import pandas as pd
 import dataclasses
-import uuid
 
 from dataclasses import dataclass, replace
-from typing import Literal
 
 LOG_ERROR_TO_PAYOUT = {
     0: 8,
@@ -122,7 +120,7 @@ class Game:
         return self.estimator == username
 
     def is_ready_to_start(self) -> bool:
-        return self.is_full() and self.estimator is not None
+        return self.is_full() and self.get_estimator() is not None
 
     def get_prediction(self) -> Prediction | None:
         return self.prediction
@@ -230,8 +228,8 @@ class Game:
             raise ValueError(
                 "Can't check if a player that's not in the game has called!"
             )
-
-        return self.get_ante(username) == max(self.antes.values())
+        
+        return len(set(self.antes.values())) == 1
 
     def fold(self, username: str) -> "Game":
         if username not in self.usernames:
@@ -324,6 +322,22 @@ class Game:
         new_current_player = self.get_opponent(self.current_player)
 
         return replace(self, current_player=new_current_player)
+    
+    def zero_antes(self) -> "Game":
+        new_game = self
+
+        for username in self.usernames:
+            new_game = new_game.set_ante(username, 0)
+
+        return new_game
+    
+    def reset_antes(self) -> "Game":
+        estimator = self.get_estimator()
+
+        if estimator is None:
+            raise ValueError("Can't reset antes if there is no estimator!")
+
+        return self.zero_antes().set_ante(estimator, 1)
 
 
 def is_valid_game_id(game_id: str) -> bool:

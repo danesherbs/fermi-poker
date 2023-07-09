@@ -37,12 +37,8 @@
 
         if (minutes < 0) {
             clearInterval(interval);
-
-            fetch(`/api/fold`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ game_id: game_id })
-            }).then(() => { window.location.href = `/game/${game_id}/play-again` })
+            minutes = 0
+            seconds = 0;
         }
 
         const minutesStr = minutes < 10 ? `${minutes}` : minutes;
@@ -54,7 +50,7 @@
     };
 
     const hasOpponentFolded = () => {
-        fetch(`/api/game/${game_id}/has-folded`, { method: "GET" })
+        fetch(`/api/game/${game_id}/has-opponent-folded`, { method: "GET" })
             .then(response => response.json())
             .then(data => {
                 if (!data.success) {
@@ -72,14 +68,14 @@
     }
 
     const hasOpponentEstimated = () => {
-        fetch(`/api/game/${game_id}/is-your-turn`, { method: "GET" })
+        fetch(`/api/game/${game_id}/has-estimate`, { method: "GET" })
             .then(response => response.json())
             .then(data => {
                 if (!data.success) {
                     console.error(data.message);
                 }
 
-                if (data.is_your_turn) {
+                if (data.has_estimate) {
                     window.location.href = `/game/${game_id}/raise-call-or-fold`; return;
                 }
 
