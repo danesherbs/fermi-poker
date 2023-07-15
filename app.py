@@ -1,17 +1,13 @@
-import threading
-
-from dataclasses import asdict
 from flask import Flask, render_template, request, session, jsonify, Response
 from typing import Dict
-from game import Game, Player, is_valid_username, is_valid_game_id, Prediction
+from game import Game, GameState, Player, is_valid_username, Prediction
 
 
 app = Flask(__name__)
 app.secret_key = "super secret key"
 games: Dict[str, Game] = {}
 players: Dict[str, Player] = {}
-
-lock = threading.Lock()
+seen_outcome_counter: Dict[str, int] = {}
 
 
 @app.route("/")
@@ -35,9 +31,6 @@ def start_game(game_id: str) -> str:
         return render_template("error.html", message=f"User not logged in!")
 
     game = games[game_id]
-
-    if not game.is_ready_to_start():
-        return render_template("error.html", message=f"Game is not ready to start!")
 
     if username not in players:
         players[username] = Player.create(username)
@@ -95,11 +88,6 @@ def raise_call_or_fold(game_id: str) -> str:
 
     player = players[username]
 
-    if not game.has_prediction():
-        return render_template(
-            "error.html", message=f"Game hasn't registered a prediction yet!"
-        )
-
     try:
         prediction = game.get_prediction()
         actual_log_answer = prediction.log_answer  # type: ignore
@@ -110,7 +98,7 @@ def raise_call_or_fold(game_id: str) -> str:
         opponent = game.get_opponent(username)
         opponents_ante = game.get_ante(opponent)
         your_ante = game.get_ante(username)
-    except ValueError as e:
+    except (ValueError, TypeError) as e:
         return render_template("error.html", message=str(e))
 
     return render_template(
@@ -174,6 +162,17 @@ def show_outcome(game_id: str) -> str:
         is_winner = game.is_winner(username)
     except ValueError as e:
         return render_template("error.html", message=str(e))
+
+    if game_id not in seen_outcome_counter:
+        seen_outcome_counter[game_id] = 0
+
+    if game.contains(username):
+        seen_outcome_counter[game_id] += 1
+
+    if seen_outcome_counter[game_id] == 2:
+        print("resetting game")
+        games[game_id] = games[game_id].reset()
+        seen_outcome_counter[game_id] = 0
 
     return render_template(
         "outcome.html",
@@ -241,7 +240,7 @@ def create_game() -> Response:
     if username is None:
         return jsonify({"success": False, "message": "User not logged in!"})
 
-    game = Game.create().join(username).set_estimator(username)
+    game = Game.create().join(username)
     games[game.id] = game
 
     return jsonify(
@@ -337,10 +336,7 @@ def set_prediction() -> Response:
     )
 
     try:
-        opponent = game.get_opponent(username)
-        new_game = (
-            game.set_prediction(prediction).reset_antes().set_current_player(opponent)
-        )
+        new_game = game.set_prediction(prediction)
     except ValueError as e:
         return jsonify({"success": False, "message": str(e)})
 
@@ -364,7 +360,7 @@ def raise_ante() -> Response:
     game = games[game_id]
 
     try:
-        new_game = game.raise_ante(username).switch_turns()
+        new_game = game.raise_ante(username)
     except ValueError as e:
         return jsonify({"success": False, "message": str(e)})
 
@@ -432,7 +428,7 @@ def has_opponent_called(game_id: str) -> Response:
         has_called = game.has_called_ante(opponent)
     except ValueError as e:
         return jsonify({"success": False, "message": str(e)})
-    
+
     return jsonify({"success": True, "has_called": has_called})
 
 
@@ -456,7 +452,7 @@ def has_opponent_folded(game_id: str) -> Response:
     return jsonify({"success": True, "has_folded": has_folded})
 
 
-@app.route("/api/game/<game_id>/is-ready-to-start", methods=["GET"])
+@app.route("/api/game/<game_id>/is-waiting-for-players", methods=["GET"])
 def is_ready_to_start(game_id: str) -> Response:
     if game_id not in games:
         return jsonify({"success": False, "message": "Game ID doesn't exist!"})
@@ -468,11 +464,11 @@ def is_ready_to_start(game_id: str) -> Response:
         return jsonify({"success": False, "message": "User not logged in!"})
 
     try:
-        is_ready_to_start = game.is_ready_to_start()
+        is_waiting_for_players = game.get_state() == GameState.WAITING_FOR_PLAYERS
     except ValueError as e:
         return jsonify({"success": False, "message": str(e)})
 
-    return jsonify({"success": True, "is_ready_to_start": is_ready_to_start})
+    return jsonify({"success": True, "is_waiting_for_players": is_waiting_for_players})
 
 
 if __name__ == "__main__":

@@ -1,7 +1,8 @@
 import random
-import pandas as pd
+import pandas as pd  # type: ignore
 import dataclasses
 
+from enum import Enum, auto
 from dataclasses import dataclass, replace
 
 LOG_ERROR_TO_PAYOUT = {
@@ -9,6 +10,40 @@ LOG_ERROR_TO_PAYOUT = {
     1: 5,
     2: 2,
     3: 1,
+}
+
+
+class InvalidStateException(Exception):
+    """Raised when a state transition is invalid."""
+
+    def __init__(self, current_state, attempted_transition):
+        self.current_state = current_state
+        self.attempted_transition = attempted_transition
+        super().__init__(
+            f"Cannot transition from {self.current_state} to {self.attempted_transition}."
+        )
+
+
+class GameState(Enum):
+    WAITING_FOR_PLAYERS = auto()
+    WAITING_FOR_ESTIMATE = auto()
+    WAITING_FOR_RAISE_CALL_OR_FOLD = auto()
+    ROUND_ENDED = auto()
+    GAME_ENDED = auto()
+
+
+VALID_TRANSITIONS: dict[GameState, tuple[GameState, ...]] = {
+    GameState.WAITING_FOR_PLAYERS: (GameState.WAITING_FOR_ESTIMATE,),
+    GameState.WAITING_FOR_ESTIMATE: (
+        GameState.ROUND_ENDED,
+        GameState.WAITING_FOR_RAISE_CALL_OR_FOLD,
+    ),
+    GameState.WAITING_FOR_RAISE_CALL_OR_FOLD: (GameState.ROUND_ENDED,),
+    GameState.ROUND_ENDED: (
+        GameState.GAME_ENDED,
+        GameState.WAITING_FOR_ESTIMATE,
+    ),
+    GameState.GAME_ENDED: (),
 }
 
 
@@ -36,6 +71,7 @@ class Prediction:
 class Player:
     username: str
     balance: int
+    was_estimator_in_last_round: bool = False
 
     @staticmethod
     def create(username: str) -> "Player":
@@ -44,10 +80,16 @@ class Player:
             balance=10,
         )
 
+    def set_was_estimator_in_last_round(
+        self, was_estimator_in_last_round: bool
+    ) -> "Player":
+        return replace(self, was_estimator_in_last_round=was_estimator_in_last_round)
+
 
 @dataclass(frozen=True)
 class Game:
     id: str
+    current_state: GameState
     usernames: set[str]
     problem: Problem
     estimator: str | None
@@ -60,6 +102,7 @@ class Game:
     def create() -> "Game":
         return Game(
             id=_generate_game_id(),
+            current_state=GameState.WAITING_FOR_PLAYERS,
             usernames=set(),
             problem=_generate_problem(),
             estimator=None,
@@ -69,34 +112,26 @@ class Game:
         )
 
     def join(self, username: str) -> "Game":
+        if self.is_full():
+            raise ValueError("Can't add another player since the game is full!")
+
         if not is_valid_username(username):
             raise ValueError(
                 "Username must be a non-empty string of alphabetical characters!"
             )
 
         new_usernames = set([*self.usernames, username])
+        old_antes = self.get_antes()
+        new_antes = {**old_antes, username: 0}
+        new_game = replace(self, usernames=new_usernames, antes=new_antes)
 
-        if len(new_usernames) > 2:
-            raise ValueError("Can't add another player since the game is full!")
+        if new_game.get_num_players() == 1:
+            return new_game.set_estimator(username).set_current_player(username)
 
-        return replace(self, usernames=new_usernames)
+        return new_game.transition_to(GameState.WAITING_FOR_ESTIMATE)
 
     def contains(self, username: str) -> bool:
         return username in self.usernames
-
-    def leave(self, username: str) -> "Game":
-        if username not in self.usernames:
-            raise ValueError("Can't remove player since they aren't in the game!")
-
-        if username in self.antes:
-            raise ValueError("Can't remove player since they have placed an ante!")
-
-        new_usernames = set(user for user in self.usernames if user != username)
-        new_antes = {
-            user: ante for user, ante in self.antes.items() if user != username
-        }
-
-        return replace(self, usernames=new_usernames, antes=new_antes)
 
     def get_num_players(self) -> int:
         return len(self.usernames)
@@ -119,14 +154,28 @@ class Game:
     def is_estimator(self, username: str) -> bool:
         return self.estimator == username
 
-    def is_ready_to_start(self) -> bool:
-        return self.is_full() and self.get_estimator() is not None
+    def has_estimator(self) -> bool:
+        return self.estimator is not None
 
     def get_prediction(self) -> Prediction | None:
         return self.prediction
 
     def set_prediction(self, prediction: Prediction | None) -> "Game":
-        return replace(self, prediction=prediction)
+        estimator = self.get_estimator()
+
+        if estimator is None:
+            raise ValueError("Can't set prediction if there is no estimator!")
+
+        if not self.is_current_player(estimator):
+            raise ValueError(
+                "Can't set prediction if estimator is not the current player!"
+            )
+
+        return (
+            replace(self, prediction=prediction)
+            .set_ante(estimator, 1)
+            .transition_to(GameState.WAITING_FOR_RAISE_CALL_OR_FOLD)
+        )
 
     def has_prediction(self) -> bool:
         return self.prediction is not None
@@ -167,9 +216,9 @@ class Game:
     def get_antes(self) -> dict[str, int]:
         return self.antes
 
-    def set_ante(self, username: str, ante: int) -> "Game":
+    def set_ante(self, username: str, new_ante: int) -> "Game":
         assert isinstance(username, str)
-        assert isinstance(ante, int)
+        assert isinstance(new_ante, int)
 
         if username not in self.usernames:
             raise ValueError("Can't set ante of a player that's not in the game!")
@@ -177,12 +226,23 @@ class Game:
         if self.has_folded(username):
             raise ValueError("Can't set ante of a player who has folded!")
 
-        if ante < 0:
+        if not self.has_prediction():
+            raise ValueError("Can't set ante when no prediction has been made yet!")
+
+        if new_ante < 0:
             raise ValueError("Ante must be non-negative!")
 
-        new_antes = {**self.antes, username: ante}
+        if not self.is_current_player(username):
+            raise ValueError("Can't set ante if it's not the player's turn!")
 
-        return replace(self, antes=new_antes)
+        opponent = self.get_opponent(username)
+
+        if new_ante < self.get_ante(opponent):
+            raise ValueError("Can't set ante to a value less than the opponent's ante!")
+
+        new_antes = {**self.antes, username: new_ante}
+
+        return replace(self, antes=new_antes).switch_turns()
 
     def get_ante(self, username: str) -> int:
         if username not in self.usernames:
@@ -214,22 +274,25 @@ class Game:
 
         opponent = self.get_opponent(username)
         oppoenents_ante = self.get_ante(opponent)
-        new_game = self.set_ante(username, oppoenents_ante)
+        new_game = self.set_ante(username, oppoenents_ante).switch_turns()
 
         if self.get_ante(username) >= new_game.get_ante(username):
             raise ValueError(
                 "Can't call ante when opponent's ante is less than or equal to yours!"
             )
 
-        return new_game
+        return new_game.transition_to(GameState.ROUND_ENDED)
 
     def has_called_ante(self, username: str) -> bool:
         if username not in self.usernames:
             raise ValueError(
                 "Can't check if a player that's not in the game has called!"
             )
-        
-        return len(set(self.antes.values())) == 1
+
+        antes = self.get_antes()
+        values = antes.values()
+
+        return len(set(values)) == 1
 
     def fold(self, username: str) -> "Game":
         if username not in self.usernames:
@@ -239,8 +302,9 @@ class Game:
             raise ValueError("Can't fold a player who has already folded!")
 
         new_folded_players = set([*self.folded_players, username])
+        new_game = replace(self, folded_players=new_folded_players).switch_turns()
 
-        return replace(self, folded_players=new_folded_players)
+        return new_game.transition_to(GameState.ROUND_ENDED)
 
     def has_folded(self, username: str) -> bool:
         if username not in self.usernames:
@@ -254,10 +318,10 @@ class Game:
         return self.folded_players
 
     def has_winner(self) -> bool:
-        if self.prediction is None:
-            return False
-
-        return True
+        return (
+            self.get_state() == GameState.ROUND_ENDED
+            and self.get_prediction() is not None
+        )
 
     def is_winner(self, username: str) -> bool:
         if username not in self.usernames:
@@ -300,18 +364,6 @@ class Game:
 
         return -LOG_ERROR_TO_PAYOUT[prediction.log_error]
 
-    def start_new_round(self, new_problem: Problem) -> "Game":
-        return Game(
-            id=self.id,
-            usernames=self.usernames,
-            problem=new_problem,
-            estimator=None,
-            prediction=None,
-            current_player=None,
-            antes=dict(),
-            folded_players=set(),
-        )
-
     def get_problem(self) -> Problem:
         return self.problem
 
@@ -322,22 +374,62 @@ class Game:
         new_current_player = self.get_opponent(self.current_player)
 
         return replace(self, current_player=new_current_player)
-    
-    def zero_antes(self) -> "Game":
-        new_game = self
 
-        for username in self.usernames:
-            new_game = new_game.set_ante(username, 0)
+    def reset(self) -> "Game":
+        return Game(
+            id=self.id,
+            current_state=GameState.WAITING_FOR_PLAYERS,
+            usernames=set(),
+            problem=_generate_problem(),
+            estimator=None,
+            prediction=None,
+            current_player=None,
+            antes=dict(),
+            folded_players=set(),
+        )
 
-        return new_game
-    
-    def reset_antes(self) -> "Game":
-        estimator = self.get_estimator()
+    def start_new_round(self) -> "Game":
+        new_estimator = self.get_next_estimator()
+        new_antes = {username: 0 for username in self.usernames}
+        new_game = replace(
+            self,
+            problem=_generate_problem(),
+            estimator=new_estimator,
+            current_player=new_estimator,
+            antes=new_antes,
+            folded_players=set(),
+        )
 
-        if estimator is None:
-            raise ValueError("Can't reset antes if there is no estimator!")
+        return new_game.transition_to(GameState.WAITING_FOR_ESTIMATE)
 
-        return self.zero_antes().set_ante(estimator, 1)
+    def get_next_estimator(self) -> str:
+        if self.estimator is None:
+            raise ValueError("Can't get next estimator if there is no estimator!")
+
+        if self.estimator not in self.usernames:
+            raise ValueError("Can't get next estimator if estimator is not in game!")
+
+        assert len(self.usernames) == 2
+
+        if self.estimator == list(self.usernames)[0]:
+            return list(self.usernames)[1]
+
+        return list(self.usernames)[0]
+
+    def get_state(self) -> GameState:
+        return self.current_state
+
+    def transition_to(self, new_state: GameState) -> "Game":
+        if not self.is_valid_transition(new_state):
+            raise InvalidStateException(self.current_state, new_state)
+
+        return replace(self, current_state=new_state)
+
+    def is_valid_transition(self, new_state):
+        return new_state in VALID_TRANSITIONS[self.current_state]
+
+    def end(self) -> "Game":
+        return self.transition_to(GameState.GAME_ENDED)
 
 
 def is_valid_game_id(game_id: str) -> bool:

@@ -11,20 +11,19 @@
     const id = "{{ game_id }}";
 
     function start() {
-        fetch(`/api/game/${id}/is-ready-to-start`)
+        fetch(`/api/game/${id}/is-waiting-for-players`)
             .then(response => response.json())
             .then(data => {
                 if (!data.success) {
                     console.error(data.message); return;
                 }
 
-                if (data.is_ready_to_start) {
+                if (!data.is_waiting_for_players) {
                     window.location.href = "/game/{{ game_id }}"; return;
                 }
 
                 setTimeout(start, 1000); return; // still waiting
             })
-            .catch(error => console.error('Error:', error));
     }
 
     window.onload = start;

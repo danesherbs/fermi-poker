@@ -1,6 +1,6 @@
 import pytest
 
-from game import Player, Game, Problem, Prediction
+from game import Player, Game, GameState, Problem, Prediction
 
 
 @pytest.fixture
@@ -65,6 +65,7 @@ def example_incorrect_prediction(example_problem: Problem) -> Prediction:
 def empty_game(example_problem: Problem) -> Game:
     return Game(
         id="test-game-id",
+        current_state=GameState.WAITING_FOR_PLAYERS,
         usernames=set(),
         problem=example_problem,
         estimator=None,
@@ -72,6 +73,41 @@ def empty_game(example_problem: Problem) -> Game:
         current_player=None,
         antes=dict(),
     )
+
+
+@pytest.fixture
+def game_waiting_for_estimate(
+    empty_game: Game,
+    example_player_one: Player,
+    example_player_two: Player,
+) -> Game:
+    return empty_game.join(example_player_one.username).join(
+        example_player_two.username
+    )
+
+
+@pytest.fixture
+def game_waiting_for_raise_call_or_fold(
+    game_waiting_for_estimate: Game,
+    example_correct_prediction: Prediction,
+) -> Game:
+    return game_waiting_for_estimate.set_prediction(example_correct_prediction)
+
+
+@pytest.fixture
+def game_with_round_ended(
+    game_waiting_for_raise_call_or_fold: Game,
+    example_player_two: Player,
+) -> Game:
+    return game_waiting_for_raise_call_or_fold.fold(example_player_two.username)
+
+
+@pytest.fixture
+def game_with_correct_estimate(
+    game_waiting_for_estimate: Game,
+    example_correct_prediction: Prediction,
+) -> Game:
+    return game_waiting_for_estimate.set_prediction(example_correct_prediction)
 
 
 def test_player_can_join_empty_waiting_room(
@@ -112,38 +148,19 @@ def test_player_must_have_valid_username(empty_game: Game) -> None:
         empty_game.join(1)  # type: ignore
 
 
-def test_player_can_leave_game(empty_game: Game, example_player_one: Player) -> None:
-    # Given
-    game_with_one_player = empty_game.join(example_player_one.username)
-
-    # When
-    new_game = game_with_one_player.leave(example_player_one.username)
-
-    # Then
-    assert game_with_one_player.contains(example_player_one.username)
-    assert not new_game.contains(example_player_one.username)
-
-
-def test_player_cant_leave_game_if_they_are_not_in_it(
-    empty_game: Game, example_player_one: Player
-) -> None:
-    # Given / When
-    with pytest.raises(ValueError):
-        empty_game.leave(example_player_one.username)
-
-
-def test_player_cant_leave_game_if_they_have_placed_an_ante(
-    empty_game: Game, example_player_one: Player
+def test_player_cant_place_ante_if_theres_no_prediction_made(
+    empty_game: Game, example_player_one: Player, example_player_two: Player
 ) -> None:
     # Given
-    game_with_one_player = empty_game.join(example_player_one.username)
-    game_with_ante = game_with_one_player.set_ante(example_player_one.username, 1)
+    game_with_one_player = (
+        empty_game.join(example_player_one.username)
+        .join(example_player_two.username)
+        .set_estimator(example_player_one.username)
+    )
 
     # When
     with pytest.raises(ValueError):
-        game_with_ante.leave(example_player_one.username)
-
-    game_with_one_player.leave(example_player_one.username)
+        game_with_one_player.set_ante(example_player_one.username, 1)
 
 
 def test_can_get_the_number_of_players_in_the_game(
@@ -220,55 +237,19 @@ def test_can_get_the_estimator(empty_game: Game, example_player_one: Player) -> 
     assert estimator == example_player_one.username
 
 
-def test_can_get_whether_or_not_game_is_ready_to_start(
-    empty_game: Game, example_player_one: Player, example_player_two: Player
-) -> None:
-    # Given
-    game_with_one_player = empty_game.join(example_player_one.username)
-    game_with_two_players = game_with_one_player.join(example_player_two.username)
-    game_with_estimator = game_with_two_players.set_estimator(
-        example_player_one.username
-    )
-
-    # When / Then
-    assert not empty_game.is_ready_to_start()
-    assert not game_with_one_player.is_ready_to_start()
-    assert not game_with_two_players.is_ready_to_start()
-    assert game_with_estimator.is_ready_to_start()
-
-
-def test_estimator_can_submit_answer(
-    empty_game: Game, example_player_one: Player, example_correct_prediction: Prediction
-) -> None:
-    # Given
-    game_with_one_player = empty_game.join(example_player_one.username)
-    game_with_estimator = game_with_one_player.set_estimator(
-        example_player_one.username
-    )
-
-    # When
-    new_game = game_with_estimator.set_prediction(example_correct_prediction)
-
-    # Then
-    assert empty_game.get_prediction() is None
-    assert new_game.get_prediction() == example_correct_prediction
-
-
 def test_can_get_whether_estimator_has_submitted_answer(
-    empty_game: Game, example_player_one: Player, example_correct_prediction: Prediction
+    game_waiting_for_estimate: Game,
+    example_correct_prediction: Prediction,
 ) -> None:
     # Given
-    game_with_one_player = empty_game.join(example_player_one.username)
-    game_with_estimator = game_with_one_player.set_estimator(
-        example_player_one.username
+    game_with_estimate = game_waiting_for_estimate.set_prediction(
+        example_correct_prediction
     )
-    game_with_estimate = game_with_estimator.set_prediction(example_correct_prediction)
 
     # When / Then
-    assert not empty_game.has_prediction()
-    assert not game_with_one_player.has_prediction()
-    assert not game_with_estimator.has_prediction()
+    assert not game_waiting_for_estimate.has_prediction()
     assert game_with_estimate.has_prediction()
+    assert game_with_estimate.get_prediction() == example_correct_prediction
 
 
 def test_can_get_and_set_the_current_player(
@@ -336,19 +317,20 @@ def test_error_is_thrown_when_getting_opponent_of_player_with_one_player(
 
 
 def test_can_set_ante_of_player(
-    empty_game: Game, example_player_one: Player, example_player_two: Player
+    game_waiting_for_raise_call_or_fold: Game,
+    example_player_two: Player,
 ) -> None:
     # Given
-    game_with_two_players = empty_game.join(example_player_one.username).join(
-        example_player_two.username
-    )
-    ante = 100
+    new_ante = 100
 
     # When
-    new_game = game_with_two_players.set_ante(example_player_one.username, ante)
+    new_game = game_waiting_for_raise_call_or_fold.set_ante(
+        example_player_two.username,
+        new_ante,
+    )
 
     # Then
-    assert new_game.get_ante(example_player_one.username) == ante
+    assert new_game.get_ante(example_player_two.username) == new_ante
 
 
 def test_error_is_thrown_when_getting_ante_of_player_not_in_game(
@@ -381,24 +363,30 @@ def test_error_is_thrown_when_setting_ante_to_non_positive_number(
 
 
 def test_that_player_can_raise_the_ante(
-    empty_game: Game, example_player_one: Player, example_player_two: Player
+    game_waiting_for_raise_call_or_fold: Game,
+    example_player_one: Player,
+    example_player_two: Player,
 ) -> None:
     # Given
-    player_one_ante = 4
-    player_two_ante = 5
-    game_with_ante = (
-        empty_game.join(example_player_one.username)
-        .join(example_player_two.username)
-        .set_ante(example_player_one.username, player_one_ante)
-        .set_ante(example_player_two.username, player_two_ante)
+    player_one_ante = game_waiting_for_raise_call_or_fold.get_ante(
+        example_player_one.username
+    )
+    player_two_ante = game_waiting_for_raise_call_or_fold.get_ante(
+        example_player_two.username
     )
 
     # When
-    new_game = game_with_ante.raise_ante(example_player_one.username)
+    new_game = game_waiting_for_raise_call_or_fold.raise_ante(
+        example_player_two.username
+    )
 
     # Then
-    assert new_game.get_ante(example_player_one.username) == player_two_ante + 1
-    assert new_game.get_ante(example_player_two.username) == player_two_ante
+    assert (
+        game_waiting_for_raise_call_or_fold.get_ante(example_player_one.username)
+        != player_two_ante
+    )
+    assert new_game.get_ante(example_player_two.username) == player_one_ante + 1
+    assert new_game.get_ante(example_player_one.username) == player_one_ante
 
 
 def test_error_is_thrown_when_raising_ante_of_player_not_in_game(
@@ -430,86 +418,65 @@ def test_error_is_thrown_when_raising_ante_of_player_with_one_player(
 
 
 def test_player_can_call_ante(
-    empty_game: Game,
+    game_waiting_for_raise_call_or_fold: Game,
     example_player_one: Player,
     example_player_two: Player,
 ) -> None:
     # Given
-    player_one_ante = 4
-    player_two_ante = 5
-    game_with_ante = (
-        empty_game.join(example_player_one.username)
-        .join(example_player_two.username)
-        .set_ante(example_player_one.username, player_one_ante)
-        .set_ante(example_player_two.username, player_two_ante)
+    player_one_ante = game_waiting_for_raise_call_or_fold.get_ante(
+        example_player_one.username
     )
 
     # When
-    new_game = game_with_ante.call_ante(example_player_one.username)
+    new_game = game_waiting_for_raise_call_or_fold.call_ante(
+        example_player_two.username
+    )
 
     # Then
-    assert new_game.get_ante(example_player_one.username) == player_two_ante
-    assert new_game.get_ante(example_player_two.username) == player_two_ante
+    assert new_game.get_ante(example_player_one.username) == player_one_ante
+    assert new_game.get_ante(example_player_two.username) == player_one_ante
 
 
-def test_error_is_thrown_when_calling_ante_but_opponents_amount_is_lower(
-    empty_game: Game,
-    example_player_one: Player,
+def test_error_is_thrown_when_setting_ante_lower_than_opponents_amount(
+    game_waiting_for_raise_call_or_fold: Game,
     example_player_two: Player,
 ) -> None:
-    # Given
-    player_one_ante = 4
-    player_two_ante = 5
-    game_with_ante = (
-        empty_game.join(example_player_one.username)
-        .join(example_player_two.username)
-        .set_ante(example_player_one.username, player_one_ante)
-        .set_ante(example_player_two.username, player_two_ante)
-    )
-
-    # When
+    # When / Then
     with pytest.raises(ValueError):
-        game_with_ante.call_ante(example_player_two.username)
+        game_waiting_for_raise_call_or_fold.set_ante(example_player_two.username, 0)
 
 
 def test_error_is_thrown_when_raising_ante_but_opponents_ante_is_lower_or_equal(
-    empty_game: Game,
+    game_waiting_for_raise_call_or_fold: Game,
     example_player_one: Player,
-    example_player_two: Player,
 ) -> None:
     # Given
-    player_one_ante = 4
-    player_two_ante = 5
-    game_with_ante = (
-        empty_game.join(example_player_one.username)
-        .join(example_player_two.username)
-        .set_ante(example_player_one.username, player_one_ante)
-        .set_ante(example_player_two.username, player_two_ante)
-    )
+    new_game = game_waiting_for_raise_call_or_fold.switch_turns()
 
     # When
     with pytest.raises(ValueError):
-        game_with_ante.raise_ante(example_player_two.username)
+        new_game.raise_ante(example_player_one.username)
 
 
 def test_can_get_whether_player_has_called_ante(
-    empty_game: Game,
+    game_waiting_for_raise_call_or_fold: Game,
     example_player_one: Player,
     example_player_two: Player,
 ) -> None:
     # Given
-    player_one_ante = 4
-    player_two_ante = 5
-    game = (
-        empty_game.join(example_player_one.username)
-        .join(example_player_two.username)
-        .set_ante(example_player_one.username, player_one_ante)
-        .set_ante(example_player_two.username, player_two_ante)
+    new_game = game_waiting_for_raise_call_or_fold.call_ante(
+        example_player_two.username
     )
 
     # When / Then
-    assert not game.has_called_ante(example_player_one.username)
-    assert game.has_called_ante(example_player_two.username)
+    assert not game_waiting_for_raise_call_or_fold.has_called_ante(
+        example_player_one.username
+    )
+    assert not game_waiting_for_raise_call_or_fold.has_called_ante(
+        example_player_two.username
+    )
+    assert new_game.has_called_ante(example_player_one.username)
+    assert new_game.has_called_ante(example_player_two.username)
 
 
 def test_error_is_thrown_when_checking_if_player_has_called_ante_but_player_not_in_game(
@@ -529,26 +496,16 @@ def test_error_is_thrown_when_checking_if_player_has_called_ante_but_player_not_
 
 
 def test_player_folding_marks_them_as_folded(
-    empty_game: Game,
+    game_waiting_for_raise_call_or_fold: Game,
     example_player_one: Player,
     example_player_two: Player,
 ) -> None:
-    # Given
-    player_one_ante = 4
-    player_two_ante = 5
-    game_with_ante = (
-        empty_game.join(example_player_one.username)
-        .join(example_player_two.username)
-        .set_ante(example_player_one.username, player_one_ante)
-        .set_ante(example_player_two.username, player_two_ante)
-    )
-
     # When
-    new_game = game_with_ante.fold(example_player_one.username)
+    new_game = game_waiting_for_raise_call_or_fold.fold(example_player_two.username)
 
     # Then
-    assert new_game.has_folded(example_player_one.username)
-    assert not new_game.has_folded(example_player_two.username)
+    assert not new_game.has_folded(example_player_one.username)
+    assert new_game.has_folded(example_player_two.username)
 
 
 def test_error_is_thrown_when_checking_if_player_has_folded_but_player_not_in_game(
@@ -620,62 +577,45 @@ def test_error_is_thrown_when_setting_ante_of_folded_player(
 
 
 def test_error_is_thrown_when_folded_player_calls_ante(
-    empty_game: Game,
+    game_waiting_for_raise_call_or_fold: Game,
     example_player_one: Player,
     example_player_two: Player,
 ) -> None:
-    # Given
-    game = (
-        empty_game.join(example_player_one.username)
-        .join(example_player_two.username)
-        .set_ante(example_player_one.username, 5)
-    )
-
     # When
-    game = game.fold(example_player_one.username)
+    new_game = game_waiting_for_raise_call_or_fold.fold(example_player_two.username)
 
     # Then
     with pytest.raises(ValueError):
-        game.call_ante(example_player_one.username)
+        new_game.call_ante(example_player_one.username)
 
 
-def test_error_is_thrown_when_getting_ante_of_player_that_hasnt_placed_ante(
-    empty_game: Game,
+def test_antes_of_both_players_is_zero_before_prediction(
+    game_waiting_for_estimate: Game,
     example_player_one: Player,
     example_player_two: Player,
 ) -> None:
-    # Given
-    game = empty_game.join(example_player_one.username).join(
-        example_player_two.username
-    )
+    # When
+    player_one_ante = game_waiting_for_estimate.get_ante(example_player_one.username)
+    player_two_ante = game_waiting_for_estimate.get_ante(example_player_two.username)
 
-    # When / Then
-    with pytest.raises(ValueError):
-        game.get_ante(example_player_one.username)
+    # Then
+    assert player_one_ante == 0
+    assert player_two_ante == 0
 
 
 def test_has_winner_is_true_when_estimator_has_submitted_answer(
-    empty_game: Game,
+    game_waiting_for_estimate: Game,
     example_correct_prediction: Prediction,
-    example_player_one: Player,
     example_player_two: Player,
 ) -> None:
-    # Given
-    game = (
-        empty_game.join(example_player_one.username)
-        .join(example_player_two.username)
-        .set_estimator(example_player_one.username)
-        .set_prediction(example_correct_prediction)
-        .set_ante(example_player_one.username, 5)
-        .set_ante(example_player_two.username, 0)
-        .call_ante(example_player_two.username)
-    )
-
-    # When / Then
+    # When
+    new_game = game_waiting_for_estimate.set_prediction(
+        example_correct_prediction
+    ).call_ante(example_player_two.username)
 
     # Then
-    assert not empty_game.has_winner()
-    assert game.has_winner()
+    assert not game_waiting_for_estimate.has_winner()
+    assert new_game.has_winner()
 
 
 def test_has_winner_is_false_when_estimator_has_not_submitted_answer(
@@ -697,51 +637,39 @@ def test_has_winner_is_false_when_estimator_has_not_submitted_answer(
 
 
 def test_is_winner_is_estimator_when_prediction_is_correct(
-    empty_game: Game,
+    game_waiting_for_estimate: Game,
     example_correct_prediction: Prediction,
     example_player_one: Player,
     example_player_two: Player,
 ) -> None:
-    # Given
-    game = (
-        empty_game.join(example_player_one.username)
-        .join(example_player_two.username)
-        .set_estimator(example_player_one.username)
-        .set_prediction(example_correct_prediction)
-        .set_ante(example_player_one.username, 5)
-        .set_ante(example_player_two.username, 0)
-        .call_ante(example_player_two.username)
-    )
+    # When
+    new_game = game_waiting_for_estimate.set_prediction(
+        example_correct_prediction
+    ).call_ante(example_player_two.username)
 
-    # When / Then
-    assert not empty_game.has_winner()
-    assert game.has_winner()
-    assert game.is_winner(example_player_one.username)
-    assert not game.is_winner(example_player_two.username)
+    # Then
+    assert not game_waiting_for_estimate.has_winner()
+    assert new_game.has_winner()
+    assert new_game.is_winner(example_player_one.username)
+    assert not new_game.is_winner(example_player_two.username)
 
 
 def test_is_winner_is_estimatee_when_prediction_is_incorrect(
-    empty_game: Game,
+    game_waiting_for_estimate: Game,
     example_incorrect_prediction: Prediction,
     example_player_one: Player,
     example_player_two: Player,
 ) -> None:
-    # Given
-    game = (
-        empty_game.join(example_player_one.username)
-        .join(example_player_two.username)
-        .set_estimator(example_player_one.username)
-        .set_prediction(example_incorrect_prediction)
-        .set_ante(example_player_one.username, 5)
-        .set_ante(example_player_two.username, 0)
-        .call_ante(example_player_two.username)
-    )
+    # When
+    new_game = game_waiting_for_estimate.set_prediction(
+        example_incorrect_prediction
+    ).call_ante(example_player_two.username)
 
-    # When / Then
-    assert not empty_game.has_winner()
-    assert game.has_winner()
-    assert not game.is_winner(example_player_one.username)
-    assert game.is_winner(example_player_two.username)
+    # Then
+    assert not game_waiting_for_estimate.has_winner()
+    assert new_game.has_winner()
+    assert not new_game.is_winner(example_player_one.username)
+    assert new_game.is_winner(example_player_two.username)
 
 
 def test_get_payout_throws_an_error_when_the_game_has_no_winner(
@@ -764,221 +692,163 @@ def test_get_payout_throws_an_error_when_the_game_has_no_winner(
 
 
 def test_error_is_thrown_when_getting_payout_of_non_existent_user(
-    empty_game: Game,
-    example_correct_prediction: Prediction,
-    example_player_one: Player,
-    example_player_two: Player,
+    game_with_round_ended: Game,
     example_player_three: Player,
 ) -> None:
-    # Given
-    game = (
-        empty_game.join(example_player_one.username)
-        .join(example_player_two.username)
-        .set_estimator(example_player_one.username)
-        .set_prediction(example_correct_prediction)
-        .set_ante(example_player_one.username, 5)
-        .set_ante(example_player_two.username, 0)
-        .call_ante(example_player_two.username)
-    )
-
     # When / Then
-    assert game.has_winner()
-
     with pytest.raises(ValueError):
-        game.get_payout(example_player_three.username)
-
-
-def test_starting_new_round_generates_game_with_unset_game_state(
-    empty_game: Game,
-    example_correct_prediction: Prediction,
-    example_player_one: Player,
-    example_player_two: Player,
-    example_other_problem: Problem,
-) -> None:
-    # Given
-    game = (
-        empty_game.join(example_player_one.username)
-        .join(example_player_two.username)
-        .set_estimator(example_player_one.username)
-        .set_prediction(example_correct_prediction)
-        .set_ante(example_player_one.username, 5)
-        .set_ante(example_player_two.username, 0)
-        .call_ante(example_player_two.username)
-        .set_current_player(example_player_one.username)
-    )
-
-    # When
-    new_game = game.start_new_round(example_other_problem)
-
-    # Then
-    assert game.get_problem() != example_other_problem
-    assert new_game.get_problem() == example_other_problem
-
-    assert game.get_estimator() == example_player_one.username
-    assert new_game.get_estimator() is None
-
-    assert game.get_prediction() == example_correct_prediction
-    assert new_game.get_prediction() is None
-
-    assert game.get_current_player() == example_player_one.username
-    assert new_game.get_current_player() is None
-
-    assert len(game.get_antes()) == 2
-    assert len(new_game.get_antes()) == 0
-
-    assert len(game.get_folded_players()) == 0
-    assert len(new_game.get_folded_players()) == 0
+        game_with_round_ended.get_payout(example_player_three.username)
 
 
 def test_switch_turns_changes_current_player_to_opponent(
-    empty_game: Game,
-    example_correct_prediction: Prediction,
+    game_waiting_for_raise_call_or_fold: Game,
     example_player_one: Player,
     example_player_two: Player,
 ) -> None:
-    # Given
-    game = (
-        empty_game.join(example_player_one.username)
-        .join(example_player_two.username)
-        .set_estimator(example_player_one.username)
-        .set_prediction(example_correct_prediction)
-        .set_ante(example_player_one.username, 5)
-        .set_ante(example_player_two.username, 0)
-        .call_ante(example_player_two.username)
-        .set_current_player(example_player_one.username)
-    )
-
     # When
-    new_game = game.switch_turns()
+    new_game = game_waiting_for_raise_call_or_fold.switch_turns()
 
     # Then
-    assert game.get_current_player() == example_player_one.username
-    assert new_game.get_current_player() == example_player_two.username
+    assert (
+        game_waiting_for_raise_call_or_fold.get_current_player()
+        == example_player_two.username
+    )
+    assert new_game.get_current_player() == example_player_one.username
 
 
 def test_error_is_thrown_when_switching_turns_without_current_player(
     empty_game: Game,
-    example_correct_prediction: Prediction,
-    example_player_one: Player,
-    example_player_two: Player,
 ) -> None:
-    # Given
-    game = (
-        empty_game.join(example_player_one.username)
-        .join(example_player_two.username)
-        .set_estimator(example_player_one.username)
-        .set_prediction(example_correct_prediction)
-        .set_ante(example_player_one.username, 5)
-        .set_ante(example_player_two.username, 0)
-        .call_ante(example_player_two.username)
-    )
-
     # When / Then
     with pytest.raises(ValueError):
-        game.switch_turns()
+        empty_game.switch_turns()
 
 
-def test_zero_antes_sets_antes_of_all_players_to_zero(
+def test_game_with_one_player_still_has_state_waiting_for_player(
     empty_game: Game,
-    example_correct_prediction: Prediction,
     example_player_one: Player,
-    example_player_two: Player,
 ) -> None:
     # Given
-    game = (
-        empty_game.join(example_player_one.username)
-        .join(example_player_two.username)
-        .set_estimator(example_player_one.username)
-        .set_prediction(example_correct_prediction)
-        .set_ante(example_player_one.username, 5)
-        .set_ante(example_player_two.username, 0)
-        .call_ante(example_player_two.username)
-    )
-
-    # When
-    new_game = game.zero_antes()
-
-    # Then
-    assert game.get_antes() == {
-        example_player_one.username: 5,
-        example_player_two.username: 5,
-    }
-
-    assert new_game.get_antes() == {
-        example_player_one.username: 0,
-        example_player_two.username: 0,
-    }
-
-
-def test_zero_antes_throws_error_if_player_has_folded(
-    empty_game: Game,
-    example_correct_prediction: Prediction,
-    example_player_one: Player,
-    example_player_two: Player,
-) -> None:
-    # Given
-    game = (
-        empty_game.join(example_player_one.username)
-        .join(example_player_two.username)
-        .set_estimator(example_player_one.username)
-        .set_prediction(example_correct_prediction)
-        .set_ante(example_player_one.username, 5)
-        .set_ante(example_player_two.username, 0)
-        .call_ante(example_player_two.username)
-        .fold(example_player_two.username)
-    )
+    game_with_one_player = empty_game.join(example_player_one.username)
 
     # When / Then
-    with pytest.raises(ValueError):
-        game.zero_antes()
+    assert empty_game.get_state() == GameState.WAITING_FOR_PLAYERS
+    assert game_with_one_player.get_state() == GameState.WAITING_FOR_PLAYERS
 
 
-def test_reset_antes_sets_estimators_ante_to_one_and_other_to_zero(
-    empty_game: Game,
-    example_correct_prediction: Prediction,
-    example_player_one: Player,
-    example_player_two: Player,
-) -> None:
-    # Given
-    game = (
-        empty_game.join(example_player_one.username)
-        .join(example_player_two.username)
-        .set_estimator(example_player_two.username)
-        .set_prediction(example_correct_prediction)
-        .set_ante(example_player_one.username, 5)
-        .set_ante(example_player_two.username, 0)
-        .call_ante(example_player_two.username)
-    )
-
-    # When
-    new_game = game.reset_antes()
-
-    # Then
-    assert game.get_antes() == {
-        example_player_one.username: 5,
-        example_player_two.username: 5,
-    }
-
-    assert new_game.get_antes() == {
-        example_player_one.username: 0,
-        example_player_two.username: 1,
-    }
-
-
-def test_reset_antes_throws_error_when_estimator_is_not_set(
+def test_two_players_joining_empty_game_changes_state_to_waiting_for_estimate(
     empty_game: Game,
     example_player_one: Player,
     example_player_two: Player,
 ) -> None:
     # Given
-    game = empty_game.join(example_player_one.username).join(
+    game_with_two_players = empty_game.join(example_player_one.username).join(
         example_player_two.username
     )
 
-    new_game = game.set_estimator(example_player_one.username)
+    # When / Then
+    assert empty_game.get_state() == GameState.WAITING_FOR_PLAYERS
+    assert game_with_two_players.get_state() == GameState.WAITING_FOR_ESTIMATE
+
+
+def test_game_waiting_for_estimate_transitions_to_waiting_for_raise_etc_when_estimate_is_given(
+    game_waiting_for_estimate: Game,
+    example_correct_prediction: Prediction,
+) -> None:
+    # Given
+    new_game = game_waiting_for_estimate.set_prediction(example_correct_prediction)
 
     # When / Then
-    with pytest.raises(ValueError):
-        game.reset_antes()
+    assert game_waiting_for_estimate.get_state() == GameState.WAITING_FOR_ESTIMATE
+    assert new_game.get_state() == GameState.WAITING_FOR_RAISE_CALL_OR_FOLD
 
-    new_game.reset_antes()
+
+def test_game_waiting_for_raise_call_or_fold_transitions_to_waiting_for_raise_when_player_raises(
+    game_waiting_for_raise_call_or_fold: Game,
+    example_player_two: Player,
+) -> None:
+    # Given
+    new_game = game_waiting_for_raise_call_or_fold.raise_ante(
+        example_player_two.username
+    )
+
+    # When / Then
+    assert (
+        game_waiting_for_raise_call_or_fold.get_state()
+        == GameState.WAITING_FOR_RAISE_CALL_OR_FOLD
+    )
+    assert new_game.get_state() == GameState.WAITING_FOR_RAISE_CALL_OR_FOLD
+
+
+def test_game_waiting_for_raise_call_or_fold_transitions_to_round_ended_when_player_folds(
+    game_waiting_for_raise_call_or_fold: Game,
+    example_player_two: Player,
+) -> None:
+    # Given
+    new_game = game_waiting_for_raise_call_or_fold.fold(example_player_two.username)
+
+    # When / Then
+    assert (
+        game_waiting_for_raise_call_or_fold.get_state()
+        == GameState.WAITING_FOR_RAISE_CALL_OR_FOLD
+    )
+    assert new_game.get_state() == GameState.ROUND_ENDED
+
+
+def test_game_waiting_for_raise_call_or_fold_transitions_to_round_ended_when_player_calls(
+    game_waiting_for_raise_call_or_fold: Game,
+    example_player_two: Player,
+) -> None:
+    # Given
+    new_game = game_waiting_for_raise_call_or_fold.call_ante(
+        example_player_two.username
+    )
+
+    # When / Then
+    assert (
+        game_waiting_for_raise_call_or_fold.get_state()
+        == GameState.WAITING_FOR_RAISE_CALL_OR_FOLD
+    )
+    assert new_game.get_state() == GameState.ROUND_ENDED
+
+
+def test_game_waiting_for_raise_call_or_fold_transitions_to_round_ended_when_multiple_players_call_and_raise(
+    game_waiting_for_raise_call_or_fold: Game,
+    example_player_one: Player,
+    example_player_two: Player,
+) -> None:
+    # Given
+    new_game = (
+        game_waiting_for_raise_call_or_fold.raise_ante(example_player_two.username)
+        .raise_ante(example_player_one.username)
+        .call_ante(example_player_two.username)
+    )
+
+    # When / Then
+    assert (
+        game_waiting_for_raise_call_or_fold.get_state()
+        == GameState.WAITING_FOR_RAISE_CALL_OR_FOLD
+    )
+    assert new_game.get_state() == GameState.ROUND_ENDED
+
+
+def test_game_with_round_ended_transitions_to_ended_when_end_is_called(
+    game_with_round_ended: Game,
+) -> None:
+    # Given
+    new_game = game_with_round_ended.end()
+
+    # When / Then
+    assert game_with_round_ended.get_state() == GameState.ROUND_ENDED
+    assert new_game.get_state() == GameState.GAME_ENDED
+
+
+def test_game_with_round_ended_transitions_to_waiting_for_estimate_when_reset_antes_is_called(
+    game_with_round_ended: Game,
+) -> None:
+    # Given
+    new_game = game_with_round_ended.start_new_round()
+
+    # When / Then
+    assert game_with_round_ended.get_state() == GameState.ROUND_ENDED
+    assert new_game.get_state() == GameState.WAITING_FOR_ESTIMATE
