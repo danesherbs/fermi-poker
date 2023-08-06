@@ -19,6 +19,7 @@ class InvalidStateException(Exception):
     def __init__(self, current_state, attempted_transition):
         self.current_state = current_state
         self.attempted_transition = attempted_transition
+
         super().__init__(
             f"Cannot transition from {self.current_state} to {self.attempted_transition}."
         )
@@ -97,6 +98,7 @@ class Game:
     current_player: str | None
     antes: dict[str, int]
     folded_players: set[str] = dataclasses.field(default_factory=set)
+    want_to_play_again: set[str] = dataclasses.field(default_factory=set)
 
     @staticmethod
     def create() -> "Game":
@@ -289,6 +291,10 @@ class Game:
                 "Can't check if a player that's not in the game has called!"
             )
 
+        for username in self.usernames:
+            if self.has_folded(username):
+                return False  # couldn't have called ante if other player folded
+
         antes = self.get_antes()
         values = antes.values()
 
@@ -354,10 +360,12 @@ class Game:
         if username not in self.usernames:
             raise ValueError("Can't get payout of a player that's not in the game!")
 
+        if not self.has_winner():
+            raise ValueError("Can't get payout if there is no winner!")
+
         prediction = self.get_prediction()
 
-        if prediction is None:
-            raise ValueError("Can't get payout if there is no prediction!")
+        assert prediction is not None
 
         if self.is_winner(username):
             return LOG_ERROR_TO_PAYOUT[prediction.log_error]
@@ -375,19 +383,6 @@ class Game:
 
         return replace(self, current_player=new_current_player)
 
-    def reset(self) -> "Game":
-        return Game(
-            id=self.id,
-            current_state=GameState.WAITING_FOR_PLAYERS,
-            usernames=set(),
-            problem=_generate_problem(),
-            estimator=None,
-            prediction=None,
-            current_player=None,
-            antes=dict(),
-            folded_players=set(),
-        )
-
     def start_new_round(self) -> "Game":
         new_estimator = self.get_next_estimator()
         new_antes = {username: 0 for username in self.usernames}
@@ -398,6 +393,7 @@ class Game:
             current_player=new_estimator,
             antes=new_antes,
             folded_players=set(),
+            want_to_play_again=set(),
         )
 
         return new_game.transition_to(GameState.WAITING_FOR_ESTIMATE)
@@ -430,6 +426,21 @@ class Game:
 
     def end(self) -> "Game":
         return self.transition_to(GameState.GAME_ENDED)
+
+    def is_game_over(self) -> bool:
+        return self.get_state() == GameState.GAME_ENDED
+
+    def play_again(self, username: str) -> "Game":
+        if username not in self.usernames:
+            raise ValueError("Can't play again if you're not in the game!")
+
+        new_want_to_play_again = {*self.want_to_play_again, username}
+        new_game = replace(self, want_to_play_again=new_want_to_play_again)
+
+        if len(new_game.want_to_play_again) == 2:
+            return new_game.start_new_round()
+
+        return new_game
 
 
 def is_valid_game_id(game_id: str) -> bool:

@@ -1,6 +1,14 @@
 from flask import Flask, render_template, request, session, jsonify, Response
 from typing import Dict
-from game import Game, GameState, Player, is_valid_username, Prediction
+from game import (
+    Game,
+    GameState,
+    Player,
+    is_valid_username,
+    is_valid_game_id,
+    Prediction,
+    InvalidStateException,
+)
 
 
 app = Flask(__name__)
@@ -56,7 +64,10 @@ def start_game(game_id: str) -> str:
 
 @app.route("/game/<game_id>/waiting-room", methods=["GET"])
 def join_waiting_room(game_id: str) -> str:
-    if game_id not in games:
+    if not is_valid_game_id(game_id):
+        return render_template("error.html", message=f"Game ID not valid!")
+
+    if game_id.upper() not in games:
         return render_template("error.html", message=f"Game ID doesn't exist!")
 
     username = session.get("username", None)
@@ -141,14 +152,6 @@ def show_outcome(game_id: str) -> str:
     player = players[username]
     game = games[game_id]
 
-    if not game.has_winner():
-        return render_template("error.html", message=f"Game doesn't have a winner yet!")
-
-    if not game.has_prediction():
-        return render_template(
-            "error.html", message=f"Game hasn't registered a prediction yet!"
-        )
-
     try:
         balance = player.balance
         prediction = game.get_prediction()
@@ -162,17 +165,6 @@ def show_outcome(game_id: str) -> str:
         is_winner = game.is_winner(username)
     except ValueError as e:
         return render_template("error.html", message=str(e))
-
-    if game_id not in seen_outcome_counter:
-        seen_outcome_counter[game_id] = 0
-
-    if game.contains(username):
-        seen_outcome_counter[game_id] += 1
-
-    if seen_outcome_counter[game_id] == 2:
-        print("resetting game")
-        games[game_id] = games[game_id].reset()
-        seen_outcome_counter[game_id] = 0
 
     return render_template(
         "outcome.html",
@@ -202,6 +194,9 @@ def login() -> Response:
         )
 
     session["username"] = username
+
+    if username not in players:
+        players[username] = Player.create(username)
 
     return jsonify(
         {
@@ -240,6 +235,9 @@ def create_game() -> Response:
     if username is None:
         return jsonify({"success": False, "message": "User not logged in!"})
 
+    if username not in players:
+        return jsonify({"success": False, "message": "User doesn't exist!"})
+
     game = Game.create().join(username)
     games[game.id] = game
 
@@ -265,7 +263,7 @@ def join_game() -> Response:
         return jsonify({"success": False, "message": "User not logged in!"})
 
     if username not in players:
-        players[username] = Player.create(username)
+        return jsonify({"success": False, "message": "User doesn't exist!"})
 
     player = players[username]
     game = games[game_id]
@@ -393,6 +391,47 @@ def call_ante() -> Response:
     return jsonify({"success": True, "message": "Successfully called ante"})
 
 
+@app.route("/api/play-again", methods=["POST"])
+def to_play_or_not_to_play() -> Response:
+    game_id = request.json["game_id"]  # type: ignore
+    play_again = request.json["play_again"]  # type: ignore
+
+    print(f"{play_again=} {type(play_again)}")
+
+    if game_id not in games:
+        return jsonify({"success": False, "message": "Game not found!"})
+
+    username = session.get("username", None)
+
+    if username is None:
+        return jsonify(
+            {
+                "success": False,
+                "message": f"User '{username}' not logged in!",
+            }
+        )
+
+    game = games[game_id]
+
+    try:
+        if play_again:
+            print("playing again")
+            new_game = game.play_again(username)
+        else:
+            new_game = game.end()
+    except (InvalidStateException, ValueError) as e:
+        return jsonify({"success": False, "message": str(e)})
+
+    games[game_id] = new_game
+
+    return jsonify(
+        {
+            "success": True,
+            "message": "Successfully submitted play again decision",
+        }
+    )
+
+
 @app.route("/api/game/<game_id>/is-your-turn", methods=["GET"])
 def get_is_my_turn(game_id: str) -> Response:
     if game_id not in games:
@@ -471,5 +510,34 @@ def is_ready_to_start(game_id: str) -> Response:
     return jsonify({"success": True, "is_waiting_for_players": is_waiting_for_players})
 
 
+@app.route("/api/game/<game_id>/is-game-over", methods=["GET"])
+def is_game_over(game_id: str) -> Response:
+    if game_id not in games:
+        return jsonify({"success": False, "message": "Game ID doesn't exist!"})
+
+    game = games[game_id]
+    username = session.get("username", None)
+
+    if username is None:
+        return jsonify({"success": False, "message": "User not logged in!"})
+
+    try:
+        is_game_over = game.is_game_over()
+        opponent_has_responded = game.get_state() in [
+            GameState.GAME_ENDED,
+            GameState.WAITING_FOR_ESTIMATE,
+        ]
+    except ValueError as e:
+        return jsonify({"success": False, "message": str(e)})
+
+    return jsonify(
+        {
+            "success": True,
+            "is_game_over": is_game_over,
+            "opponent_has_responded": opponent_has_responded,
+        }
+    )
+
+
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(host="0.0.0.0", port=5001, debug=False)
