@@ -21,6 +21,7 @@
             <div class="text-xs">Problem</div>
             <div>{{ problem }}</div>
         </div>
+        {% if has_estimate %}
         <div class="w-full">
             {% if is_estimator %}
             <div class="text-xs">Estimate</div>
@@ -31,6 +32,7 @@
                 10^({{ estimate }} +/- {{ error }})
             </div>
         </div>
+        {% endif %}
         <div class="w-full">
             <div class="text-xs">Answer</div>
             <div>
@@ -40,14 +42,54 @@
                 </a>
             </div>
         </div>
-        <button class="bg-black text-white border-2 border black w-full py-1" onclick="ok()">ok</button>
+        <div class="max-w-xs">
+            <div class="w-full text-center my-8" id="text">Want to play another round?</div>
+            <div class="space-y-1" id="buttons">
+                <button onclick="yes()" class="w-full border-2 border-black px-2 py-1 hover:text-white hover:bg-black">
+                    yes
+                </button>
+                <button onclick="no()" class="w-full border-2 border-black px-2 py-1 hover:text-white hover:bg-black">
+                    no
+                </button>
+            </div>
+            <div id="message" class="text-red-600"></div>
+        </div>
     </div>
 </div>
 <script>
     const game_id = "{{ game_id }}";
+    const state = "{{ state }}";
 
-    const ok = () => {
-        window.location.href = `/game/${game_id}/play-again`;
+    const yes = () => {
+        fetch("/api/play-again", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ game_id, play_again: true })
+        })
+            .then(response => response.json())
+            .then(response => {
+                if (!response.success) {
+                    document.getElementById("message").innerHTML = response.message; return;
+                }
+
+                window.location.reload();
+            })
+    }
+
+    const no = () => {
+        fetch("/api/play-again", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ game_id, play_again: false })
+        })
+            .then(response => response.json())
+            .then(response => {
+                if (!response.success) {
+                    document.getElementById("message").innerHTML = response.message; return;
+                }
+
+                window.location.href = "/";
+            })
     }
 </script>
 {% endblock %}

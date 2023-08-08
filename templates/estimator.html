@@ -3,6 +3,11 @@
 {% block content %}
 <div class="flex w-full justify-center">
     <div class="max-w-xs space-y-6 my-8 px-2">
+        <div class="text-sm">
+            Confused? Click <a href="/instructions" target="_blank" class="underline text-blue-700 text-sm">here</a> to
+            read the
+            rules.
+        </div>
         <div class="flex">
             <div class="w-1/2">
                 <div class="text-xs">Balance</div>
@@ -79,8 +84,6 @@
         seconds--;
     };
 
-    const interval = setInterval(countdown, 1000);
-
     const submit = () => {
         const estimate = document.getElementById("estimate").value;
         const error = document.getElementById("error").value;
@@ -89,9 +92,15 @@
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ game_id, estimate, error })
-        }).then(() => {
-            window.location.href = `/game/${game_id}/raise-call-or-fold`;
         })
+            .then(response => response.json())
+            .then((data) => {
+                if (!data.success) {
+                    console.error(data.message); return;
+                }
+
+                window.location.reload(); return;
+            })
     }
 
     const fold = () => {
@@ -99,9 +108,17 @@
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ game_id })
-        }).then(() => {
-            window.location.href = `/game/${game_id}/play-again`;
         })
+            .then(response => response.json())
+            .then((data) => {
+                if (!data.success) {
+                    console.error(data.message); return;
+                }
+
+                window.location.reload(); return;
+            })
     }
+
+    const interval = setInterval(countdown, 1000);
 </script>
 {% endblock %}

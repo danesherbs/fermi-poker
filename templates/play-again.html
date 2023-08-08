@@ -3,79 +3,28 @@
 {% block content %}
 <div class="flex w-full justify-center">
     <div class="max-w-xs">
-        <div class="w-full text-center my-8" id="text">Want to play another round?</div>
-        <div class="space-y-1" id="buttons">
-            <button onclick="yes()" class="w-full border-2 border-black px-2 py-1 hover:text-white hover:bg-black">
-                yes
-            </button>
-            <button onclick="no()" class="w-full border-2 border-black px-2 py-1 hover:text-white hover:bg-black">
-                no
-            </button>
-        </div>
+        <div class="w-full text-center my-8">Waiting for your opponent to respond...</div>
         <div id="message" class="text-red-600"></div>
     </div>
 </div>
 <script>
     const game_id = "{{ game_id }}";
+    const state = "{{ state }}";
 
-    const yes = () => {
-        fetch("/api/play-again", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ game_id, play_again: true })
-        })
+    const getGameState = () => {
+        fetch(`/api/game/${game_id}/state`)
             .then(response => response.json())
-            .then(response => {
-                if (!response.success) {
-                    document.getElementById("message").innerHTML = response.message; return;
+            .then((data) => {
+                if (!data.success) {
+                    console.error(data.message); return;
                 }
 
-                document.getElementById("text").innerHTML = "Waiting for opponent...";
-                document.getElementById("buttons").innerHTML = "";
+                if (data.state !== state) {
+                    window.location.reload(); return;
+                }
             })
     }
 
-    const no = () => {
-        fetch("/api/play-again", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ game_id, play_again: false })
-        })
-            .then(response => response.json())
-            .then(response => {
-                if (!response.success) {
-                    document.getElementById("message").innerHTML = response.message; return;
-                }
-
-                window.location.href = "/";
-            })
-    }
-
-    const doYouWantToPlayAgain = () => {
-        fetch(`/api/game/${game_id}/is-game-over`, { method: "GET" })
-            .then(response => response.json())
-            .then(response => {
-                if (!response.success) {
-                    document.getElementById("message").innerHTML = response.message; return;
-                }
-
-                if (!response.opponent_has_responded) {
-                    return;
-                }
-
-                if (response.is_game_over) {
-                    document.getElementById("text").innerHTML = "Opponent doesn't want to play again :'(<br><br><a href='/' class='underline'>Go to homepage</a>";
-                    document.getElementById("buttons").innerHTML = "";
-                }
-
-                if (!response.is_game_over) {
-                    window.location.href = `/game/${game_id}`;
-                }
-
-                clearInterval(interval);
-            })
-    }
-
-    const interval = setInterval(doYouWantToPlayAgain, 1000);
+    const stateInterval = setInterval(getGameState, 1000);
 </script>
 {% endblock %}

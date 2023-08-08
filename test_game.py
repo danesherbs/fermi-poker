@@ -1,6 +1,6 @@
 import pytest
 
-from game import Player, Game, GameState, Problem, Prediction
+from game import Player, Game, GameState, Problem, Estimate
 
 
 @pytest.fixture
@@ -46,16 +46,16 @@ def example_other_problem() -> Problem:
 
 
 @pytest.fixture
-def example_correct_prediction(example_problem: Problem) -> Prediction:
-    return Prediction(
+def example_correct_prediction(example_problem: Problem) -> Estimate:
+    return Estimate(
         log_answer=example_problem.log_answer,
         log_error=2,
     )
 
 
 @pytest.fixture
-def example_incorrect_prediction(example_problem: Problem) -> Prediction:
-    return Prediction(
+def example_incorrect_prediction(example_problem: Problem) -> Estimate:
+    return Estimate(
         log_answer=example_problem.log_answer + 3,
         log_error=1,
     )
@@ -69,7 +69,7 @@ def empty_game(example_problem: Problem) -> Game:
         usernames=set(),
         problem=example_problem,
         estimator=None,
-        prediction=None,
+        estimate=None,
         current_player=None,
         antes=dict(),
     )
@@ -89,9 +89,9 @@ def game_waiting_for_estimate(
 @pytest.fixture
 def game_waiting_for_raise_call_or_fold(
     game_waiting_for_estimate: Game,
-    example_correct_prediction: Prediction,
+    example_correct_prediction: Estimate,
 ) -> Game:
-    return game_waiting_for_estimate.set_prediction(example_correct_prediction)
+    return game_waiting_for_estimate.set_estimate(example_correct_prediction)
 
 
 @pytest.fixture
@@ -105,9 +105,9 @@ def game_with_round_ended(
 @pytest.fixture
 def game_with_correct_estimate(
     game_waiting_for_estimate: Game,
-    example_correct_prediction: Prediction,
+    example_correct_prediction: Estimate,
 ) -> Game:
-    return game_waiting_for_estimate.set_prediction(example_correct_prediction)
+    return game_waiting_for_estimate.set_estimate(example_correct_prediction)
 
 
 def test_player_can_join_empty_waiting_room(
@@ -239,17 +239,17 @@ def test_can_get_the_estimator(empty_game: Game, example_player_one: Player) -> 
 
 def test_can_get_whether_estimator_has_submitted_answer(
     game_waiting_for_estimate: Game,
-    example_correct_prediction: Prediction,
+    example_correct_prediction: Estimate,
 ) -> None:
     # Given
-    game_with_estimate = game_waiting_for_estimate.set_prediction(
+    game_with_estimate = game_waiting_for_estimate.set_estimate(
         example_correct_prediction
     )
 
     # When / Then
-    assert not game_waiting_for_estimate.has_prediction()
-    assert game_with_estimate.has_prediction()
-    assert game_with_estimate.get_prediction() == example_correct_prediction
+    assert not game_waiting_for_estimate.has_estimate()
+    assert game_with_estimate.has_estimate()
+    assert game_with_estimate.get_esimate() == example_correct_prediction
 
 
 def test_can_get_and_set_the_current_player(
@@ -605,11 +605,11 @@ def test_antes_of_both_players_is_zero_before_prediction(
 
 def test_has_winner_is_true_when_estimator_has_submitted_answer(
     game_waiting_for_estimate: Game,
-    example_correct_prediction: Prediction,
+    example_correct_prediction: Estimate,
     example_player_two: Player,
 ) -> None:
     # When
-    new_game = game_waiting_for_estimate.set_prediction(
+    new_game = game_waiting_for_estimate.set_estimate(
         example_correct_prediction
     ).call_ante(example_player_two.username)
 
@@ -620,7 +620,7 @@ def test_has_winner_is_true_when_estimator_has_submitted_answer(
 
 def test_has_winner_is_false_when_estimator_has_not_submitted_answer(
     empty_game: Game,
-    example_correct_prediction: Prediction,
+    example_correct_prediction: Estimate,
     example_player_one: Player,
     example_player_two: Player,
 ) -> None:
@@ -638,12 +638,12 @@ def test_has_winner_is_false_when_estimator_has_not_submitted_answer(
 
 def test_is_winner_is_estimator_when_prediction_is_correct(
     game_waiting_for_estimate: Game,
-    example_correct_prediction: Prediction,
+    example_correct_prediction: Estimate,
     example_player_one: Player,
     example_player_two: Player,
 ) -> None:
     # When
-    new_game = game_waiting_for_estimate.set_prediction(
+    new_game = game_waiting_for_estimate.set_estimate(
         example_correct_prediction
     ).call_ante(example_player_two.username)
 
@@ -656,12 +656,12 @@ def test_is_winner_is_estimator_when_prediction_is_correct(
 
 def test_is_winner_is_estimatee_when_prediction_is_incorrect(
     game_waiting_for_estimate: Game,
-    example_incorrect_prediction: Prediction,
+    example_incorrect_prediction: Estimate,
     example_player_one: Player,
     example_player_two: Player,
 ) -> None:
     # When
-    new_game = game_waiting_for_estimate.set_prediction(
+    new_game = game_waiting_for_estimate.set_estimate(
         example_incorrect_prediction
     ).call_ante(example_player_two.username)
 
@@ -753,10 +753,10 @@ def test_two_players_joining_empty_game_changes_state_to_waiting_for_estimate(
 
 def test_game_waiting_for_estimate_transitions_to_waiting_for_raise_etc_when_estimate_is_given(
     game_waiting_for_estimate: Game,
-    example_correct_prediction: Prediction,
+    example_correct_prediction: Estimate,
 ) -> None:
     # Given
-    new_game = game_waiting_for_estimate.set_prediction(example_correct_prediction)
+    new_game = game_waiting_for_estimate.set_estimate(example_correct_prediction)
 
     # When / Then
     assert game_waiting_for_estimate.get_state() == GameState.WAITING_FOR_ESTIMATE
@@ -847,7 +847,7 @@ def test_game_with_round_ended_transitions_to_waiting_for_estimate_when_reset_an
     game_with_round_ended: Game,
 ) -> None:
     # Given
-    new_game = game_with_round_ended.start_new_round()
+    new_game = game_with_round_ended._start_new_round()
 
     # When / Then
     assert game_with_round_ended.get_state() == GameState.ROUND_ENDED

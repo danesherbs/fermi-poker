@@ -8,24 +8,23 @@
     </div>
 </div>
 <script>
-    const id = "{{ game_id }}";
+    const game_id = "{{ game_id }}";
+    const state = "{{ state }}";
 
-    function start() {
-        fetch(`/api/game/${id}/is-waiting-for-players`)
+    const getGameState = () => {
+        fetch(`/api/game/${game_id}/state`)
             .then(response => response.json())
             .then(data => {
                 if (!data.success) {
                     console.error(data.message); return;
                 }
 
-                if (!data.is_waiting_for_players) {
-                    window.location.href = "/game/{{ game_id }}"; return;
+                if (state !== data.state) {
+                    window.location.reload(); return;
                 }
-
-                setTimeout(start, 1000); return; // still waiting
             })
     }
 
-    window.onload = start;
+    const stateInterval = setInterval(getGameState, 1000);
 </script>
 {% endblock %}

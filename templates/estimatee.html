@@ -3,6 +3,11 @@
 {% block content %}
 <div class="flex w-full justify-center">
     <div class="max-w-xs space-y-6 my-8 px-2">
+        <div class="text-sm">
+            Confused? Click <a href="/instructions" target="_blank" class="underline text-blue-700">here</a> to
+            read the
+            rules.
+        </div>
         <div class="w-full">
             <div class="text-xs">Instruction</div>
             <div>Hang tight! Your opponent is estimating the problem below...</div>
@@ -25,6 +30,7 @@
 </div>
 <script>
     const game_id = "{{ game_id }}";
+    const state = "{{ state }}";
 
     let minutes = 2;
     let seconds = 30;
@@ -49,45 +55,21 @@
         seconds--;
     };
 
-    const hasOpponentFolded = () => {
-        fetch(`/api/game/${game_id}/has-opponent-folded`, { method: "GET" })
+    const getGameState = () => {
+        fetch(`/api/game/${game_id}/state`)
             .then(response => response.json())
-            .then(data => {
+            .then((data) => {
                 if (!data.success) {
                     console.error(data.message); return;
                 }
 
-                if (data.has_folded) {
-                    window.location.href = `/game/${game_id}/play-again`; return;  // player folded
+                if (data.state !== state) {
+                    window.location.reload(); return;
                 }
-
-                console.log("has-folded data:", data)
-
-                setTimeout(hasOpponentFolded, 1000); // waiting for opponent to estimate
-            })
-    }
-
-    const hasOpponentEstimated = () => {
-        fetch(`/api/game/${game_id}/has-estimate`, { method: "GET" })
-            .then(response => response.json())
-            .then(data => {
-                if (!data.success) {
-                    console.error(data.message);
-                }
-
-                if (data.has_estimate) {
-                    window.location.href = `/game/${game_id}/raise-call-or-fold`; return;
-                }
-
-                setTimeout(hasOpponentEstimated, 1000); // waiting for opponent to estimate
             })
     }
 
     const interval = setInterval(countdown, 1000);
-
-    window.onload = () => {
-        hasOpponentFolded();
-        hasOpponentEstimated()
-    };
+    const stateInterval = setInterval(getGameState, 1000);
 </script>
 {% endblock %}

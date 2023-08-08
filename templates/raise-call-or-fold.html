@@ -5,11 +5,7 @@
     <div class="max-w-xs space-y-6 my-8 px-2">
         <div class="w-full">
             <div class="text-xs">Instruction</div>
-            {% if is_your_turn %}
-            <div>Raise, call or fold</div>
-            {% else %}
-            <div>Wait for opponent to raise, call or fold</div>
-            {% endif %}
+            <div>{{ instruction }}</div>
         </div>
         <div class="flex">
             <div class="w-1/2">
@@ -26,11 +22,7 @@
             <div>{{ problem }}</div>
         </div>
         <div class="w-full">
-            {% if is_estimator %}
-            <div class="text-xs">Estimate</div>
-            {% else %}
-            <div class="text-xs">Opponent's estimate</div>
-            {% endif %}
+            <div class="text-xs">{{ estimate_header }}</div>
             <div>
                 10^({{ estimate }} +/- {{ error }})
             </div>
@@ -49,18 +41,18 @@
                 </div>
             </div>
         </div>
+        {% if show_buttons %}
         <div class="space-y-1">
-            {% if is_your_turn %}
             <button class="bg-black text-white border-2 border black w-full py-1" onclick="raise()">raise $1</button>
             <button class="bg-black text-white border-2 border black w-full py-1" onclick="call()">call</button>
             <button class="bg-black text-white border-2 border black w-full py-1" onclick="fold()">fold</button>
-            {% endif %}
         </div>
+        {% endif %}
     </div>
 </div>
 <script>
     const game_id = "{{ game_id }}";
-    const is_your_turn = "{{ is_your_turn }}" == "True";
+    const state = "{{ state }}";
 
     let minutes = 0;
     let seconds = 15;
@@ -74,15 +66,15 @@
         if (minutes < 0) {
             clearInterval(countdownInterval);
 
-            if (is_your_turn) {
-                fetch(`/api/fold`, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ game_id })
-                }).then(() => {
-                    window.location.href = `/game/${game_id}/play-again`;
-                })
-            }
+            fetch(`/api/fold`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ game_id })
+            }).then(() => {
+                window.location.reload();
+            })
+
+            return;
         }
 
         const minutesStr = minutes < 10 ? `${minutes}` : minutes;
@@ -98,9 +90,15 @@
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ game_id })
-        }).then(() => {
-            window.location.reload();
         })
+            .then(response => response.json())
+            .then((data) => {
+                if (!data.success) {
+                    console.error(data.message); return;
+                }
+
+                window.location.reload();
+            })
     }
 
     const call = () => {
@@ -108,13 +106,14 @@
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ game_id })
-        }).then(response => response.json())
+        })
+            .then(response => response.json())
             .then((data) => {
                 if (!data.success) {
                     console.error(data.message); return;
                 }
 
-                window.location.href = `/game/${game_id}/outcome`
+                window.location.reload();
             })
     }
 
@@ -123,59 +122,32 @@
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ game_id })
-        }).then(() => {
-            window.location.href = `/game/${game_id}/play-again`
         })
-    }
-
-    const hasOpponentRaised = () => {
-        fetch(`/api/game/${game_id}/is-your-turn`)
             .then(response => response.json())
-            .then(data => {
-                if (data.is_your_turn) {
-                    window.location.reload();
-                }
-            })
-    }
-
-    const hasOpponentFolded = () => {
-        fetch(`/api/game/${game_id}/has-opponent-folded`, { method: "GET" })
-            .then(response => response.json())
-            .then(data => {
+            .then((data) => {
                 if (!data.success) {
-                    clearInterval(foldedInterval);
                     console.error(data.message); return;
                 }
 
-                if (data.has_folded) {
-                    clearInterval(foldedInterval);
-                    window.location.href = `/game/${game_id}/play-again`;
-                }
+                window.location.reload();
             })
     }
 
-    const hasOpponentCalled = () => {
-        fetch(`/api/game/${game_id}/has-opponent-called`, { method: "GET" })
+    const getGameState = () => {
+        fetch(`/api/game/${game_id}/state`)
             .then(response => response.json())
-            .then(data => {
+            .then((data) => {
                 if (!data.success) {
-                    clearInterval(foldedInterval);
                     console.error(data.message); return;
                 }
 
-                if (data.has_called) {
-                    clearInterval(foldedInterval);
-                    window.location.href = `/game/${game_id}/outcome`;
+                if (data.state !== state) {
+                    window.location.reload(); return;
                 }
             })
     }
 
     const countdownInterval = setInterval(countdown, 1000);
-    const foldedInterval = setInterval(hasOpponentFolded, 1000);
-    const calledInterval = setInterval(hasOpponentCalled, 1000);
-
-    if (!is_your_turn) {
-        const turnsInterval = setInterval(hasOpponentRaised, 1000);
-    }
+    const stateInterval = setInterval(getGameState, 1000);
 </script>
 {% endblock %}

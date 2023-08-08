@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="flex w-full justify-center">
+    <div class="max-w-lg space-y-6 my-8 px-2">
+        <div>
+            <b>Objective:</b> The goal of Fermi Poker is to solve a Fermi problem as accurately as possible.
+        </div>
+        <div>
+            Here are the rules:
+        </div>
+        <div>
+            1. <b>Estimating:</b> There are two players and only one player makes an estimate at a time. The
+            estimator must guess the answer to a Fermi problem. For instance, if the problem is "What's the average
+            number of hairs on a person's head?", you might guess 10^(6 +/- 2). This estimate is correct since the true
+            average number of hairs on a human head is 10^6 which is in the range of 10^4 to 10^8.
+        </div>
+        <div>
+            2. <b>Payouts:</b> After an estimate is made, the other player pays the estimator if the estimate is correct
+            (i.e., the true answer lies within the error bounds of the estimate). If the estimate is incorrect (i.e.,
+            the true answer lies outside the error bounds), the estimator pays the other player.
+        </div>
+        <div>
+            3. <b>Payout size:</b> The size of the payout is inversely proportional to the error.
+            <ul class="list-disc ml-8 mt-4">
+                <li>If your error was small and your estimate was correct, you receive a large payout.</li>
+                <li>If your error was small but your estimate was incorrect, you pay a large amount.</li>
+                <li>If your error was large but your estimate was correct, you receive a small payout.</li>
+                <li>If your error was large and your estimate was incorrect, you pay a small amount.</li>
+            </ul>
+        </div>
+        <div>
+            Remember, the goal in Fermi Poker is not only to make correct estimates but also to be as precise as
+            possible. The more precise your estimates, the more you stand to win—or lose. Good luck and happy
+            estimating!
+        </div>
+    </div>
+</div>
+{% endblock %}
