@@ -1,6 +1,5 @@
 import random
 import pandas as pd  # type: ignore
-import dataclasses
 
 from enum import Enum, auto
 from dataclasses import dataclass, replace
