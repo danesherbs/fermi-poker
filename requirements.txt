@@ -3,3 +3,4 @@ flask
 flask_session
 pytest
 pandas
+gunicorn
