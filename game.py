@@ -108,10 +108,6 @@ class Player:
         )
 
     def set_balance(self, new_balance: int) -> "Player":
-        # pre-conditions
-        assert new_balance >= 0
-
-        # body
         return replace(self, balance=new_balance)
 
 
