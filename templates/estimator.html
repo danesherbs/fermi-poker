@@ -73,7 +73,15 @@
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ game_id: game_id })
-            }).then(() => { window.location.href = `/game/${game_id}/play-again` })
+            })
+                .then(response => response.json())
+                .then(() => {
+                    if (!data.success) {
+                        console.error(data.message); return;
+                    }
+
+                    window.location.reload(); return;
+                })
         }
 
         const minutesStr = minutes < 10 ? `${minutes}` : minutes;
