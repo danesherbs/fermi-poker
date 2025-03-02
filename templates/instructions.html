@@ -4,35 +4,73 @@
 <div class="flex w-full justify-center">
     <div class="max-w-lg space-y-6 my-8 px-4">
         <div>
-            <b>Objective:</b> The goal of Fermi Poker is to solve a Fermi problem as accurately as possible.
+            <h2 class="text-xl font-bold mb-2">Fermi Poker: Game Instructions</h2>
+            <p><b>Objective:</b> Win the most chips by making accurate estimates and strategic bets. Players take turns making Fermi
+                estimates and betting on the accuracy of these estimates, similar to poker.</p>
         </div>
-        <div>
-            Here are the rules:
+        <div class="bg-gray-100 p-4 rounded-lg">
+            <h3 class="font-bold mb-2">How to Play</h3>
+        
+            <ol class="space-y-4">
+                <li>
+                    <b>Taking Turns:</b> In this two-player game, you'll alternate roles as the estimator and the bettor. When
+                    you're the estimator, you'll answer a Fermi question like "What's the average number of hairs on a person's
+                    head?"
+                </li>
+        
+                <li>
+                    <b>Making Your Estimate:</b> Express your answer using scientific notation in the form of 10^(x ± y), where:
+                    <ul class="list-disc ml-6 mt-2">
+                        <li>x is your central estimate (the exponent of 10)</li>
+                        <li>y is your uncertainty range (in orders of magnitude)</li>
+                    </ul>
+                    <p class="mt-2 italic">Example: If you estimate 1,000,000 hairs with an uncertainty of 2 orders of
+                        magnitude, enter 10^(6 ± 2). This means your estimate ranges from 10^4 (10,000) to 10^8 (100,000,000).
+                    </p>
+                </li>
+        
+                <li>
+                    <b>Betting Round:</b> After the estimate is made:
+                    <ul class="list-disc ml-6 mt-2">
+                        <li>The non-estimating player starts by calling, raising, or folding</li>
+                        <li>If they raise, the estimator can then call or fold</li>
+                        <li>Betting continues until both players have called or someone folds</li>
+                    </ul>
+                </li>
+        
+                <li>
+                    <b>Determining Accuracy:</b> The true answer is revealed after betting concludes:
+                    <ul class="list-disc ml-6 mt-2">
+                        <li>If the true answer falls within your estimated range, your estimate is accurate</li>
+                        <li>If the true answer is outside your range, your estimate is inaccurate</li>
+                    </ul>
+                </li>
+        
+                <li>
+                    <b>Payout Structure:</b> The payout depends on both accuracy and precision:
+                    <ul class="list-disc ml-6 mt-2">
+                        <li><b>Accurate estimate with narrow range (small y):</b> Highest payout</li>
+                        <li><b>Accurate estimate with wide range (large y):</b> Lower payout</li>
+                        <li><b>Inaccurate estimate with narrow range:</b> Largest loss</li>
+                        <li><b>Inaccurate estimate with wide range:</b> Smaller loss</li>
+                    </ul>
+                    <p class="mt-2">If either player folds, the remaining player wins the current pot.</p>
+                </li>
+        
+                <li>
+                    <b>Winning the Game:</b> Play continues for an agreed-upon number of rounds. The player with the most chips
+                    at the end wins!
+                </li>
+            </ol>
         </div>
-        <div>
-            1. <b>Estimating:</b> There are two players and only one player makes an estimate at a time. The
-            estimator must guess the answer to a Fermi problem. For instance, if the problem is "What's the average
-            number of hairs on a person's head?", you might guess 10^(6 +/- 2). This estimate is correct since the true
-            average number of hairs on a human head is 10^6 which is in the range of 10^4 to 10^8.
-        </div>
-        <div>
-            2. <b>Payouts:</b> After an estimate is made, the other player pays the estimator if the estimate is correct
-            (i.e., the true answer lies within the error bounds of the estimate). If the estimate is incorrect (i.e.,
-            the true answer lies outside the error bounds), the estimator pays the other player.
-        </div>
-        <div>
-            3. <b>Payout size:</b> The size of the payout is inversely proportional to the error.
-            <ul class="list-disc ml-8 mt-4">
-                <li>If your error was small and your estimate was correct, you receive a large payout.</li>
-                <li>If your error was small but your estimate was incorrect, you pay a large amount.</li>
-                <li>If your error was large but your estimate was correct, you receive a small payout.</li>
-                <li>If your error was large and your estimate was incorrect, you pay a small amount.</li>
+        <div class="bg-blue-100 p-4 rounded-lg">
+            <h3 class="font-bold mb-2">Strategic Tips</h3>
+            <ul class="list-disc ml-6">
+                <li>Balance precision with accuracy — narrower ranges (smaller y values) yield higher rewards but carry greater
+                    risk</li>
+                <li>Consider the difficulty of the question when deciding your uncertainty range</li>
+                <li>Watch your opponent's betting patterns to gauge their confidence</li>
             </ul>
-        </div>
-        <div>
-            Remember, the goal in Fermi Poker is not only to make correct estimates but also to be as precise as
-            possible. The more precise your estimates, the more you stand to win—or lose. Good luck and happy
-            estimating!
         </div>
     </div>
 </div>
