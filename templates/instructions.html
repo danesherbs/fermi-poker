@@ -4,72 +4,69 @@
 <div class="flex w-full justify-center">
     <div class="max-w-lg space-y-6 my-8 px-4">
         <div>
-            <h2 class="text-xl font-bold mb-2">Fermi Poker: Game Instructions</h2>
-            <p><b>Objective:</b> Win the most chips by making accurate estimates and strategic bets. Players take turns making Fermi
-                estimates and betting on the accuracy of these estimates, similar to poker.</p>
+            <h2 class="text-xl font-bold mb-2">Fermi Poker</h2>
+            <p>Answer hard-to-Google questions, bet on your accuracy, and win chips. The more precise you are, the more you win — or lose.</p>
         </div>
+
         <div class="bg-gray-100 p-4 rounded-lg">
-            <h3 class="font-bold mb-2">How to Play</h3>
-        
-            <ol class="space-y-4">
-                <li>
-                    <b>Taking Turns:</b> In this two-player game, you'll alternate roles as the estimator and the bettor. When
-                    you're the estimator, you'll answer a Fermi question like "What's the average number of hairs on a person's
-                    head?"
-                </li>
-        
-                <li>
-                    <b>Making Your Estimate:</b> Express your answer using scientific notation in the form of 10^(x ± y), where:
-                    <ul class="list-disc ml-6 mt-2">
-                        <li>x is your central estimate (the exponent of 10)</li>
-                        <li>y is your uncertainty range (in orders of magnitude)</li>
-                    </ul>
-                    <p class="mt-2 italic">Example: If you estimate 1,000,000 hairs with an uncertainty of 2 orders of
-                        magnitude, enter 10^(6 ± 2). This means your estimate ranges from 10^4 (10,000) to 10^8 (100,000,000).
-                    </p>
-                </li>
-        
-                <li>
-                    <b>Betting Round:</b> After the estimate is made:
-                    <ul class="list-disc ml-6 mt-2">
-                        <li>The non-estimating player starts by calling, raising, or folding</li>
-                        <li>If they raise, the estimator can then call or fold</li>
-                        <li>Betting continues until both players have called or someone folds</li>
-                    </ul>
-                </li>
-        
-                <li>
-                    <b>Determining Accuracy:</b> The true answer is revealed after betting concludes:
-                    <ul class="list-disc ml-6 mt-2">
-                        <li>If the true answer falls within your estimated range, your estimate is accurate</li>
-                        <li>If the true answer is outside your range, your estimate is inaccurate</li>
-                    </ul>
-                </li>
-        
-                <li>
-                    <b>Payout Structure:</b> The payout depends on both accuracy and precision:
-                    <ul class="list-disc ml-6 mt-2">
-                        <li><b>Accurate estimate with narrow range (small y):</b> Highest payout</li>
-                        <li><b>Accurate estimate with wide range (large y):</b> Lower payout</li>
-                        <li><b>Inaccurate estimate with narrow range:</b> Largest loss</li>
-                        <li><b>Inaccurate estimate with wide range:</b> Smaller loss</li>
-                    </ul>
-                    <p class="mt-2">If either player folds, the remaining player wins the current pot.</p>
-                </li>
-        
-                <li>
-                    <b>Winning the Game:</b> Play continues for an agreed-upon number of rounds. The player with the most chips
-                    at the end wins!
-                </li>
+            <h3 class="font-bold mb-2">The Core Loop</h3>
+            <ol class="list-decimal ml-6 space-y-2">
+                <li>The <b>estimator</b> sees a question (e.g. "How many hairs on a human head?") and submits an answer as a power of 10 with an uncertainty range: <span class="font-mono">10^(x ± y)</span>.</li>
+                <li>The <b>bettor</b> sees the estimate and decides: raise, call, or fold.</li>
+                <li>The true answer is revealed. If it falls inside the range, the <b>estimator wins</b>. If outside, the <b>bettor wins</b>.</li>
             </ol>
+            <p class="mt-3 text-sm text-gray-600">Players alternate roles each round. The estimator antes 1 chip to start.</p>
         </div>
+
+        <div class="bg-gray-100 p-4 rounded-lg">
+            <h3 class="font-bold mb-2">The Key Tradeoff</h3>
+            <p class="mb-3">Your uncertainty range (± y) sets the payout multiplier. Narrower ranges pay more — but are harder to hit.</p>
+            <table class="w-full text-sm">
+                <thead>
+                    <tr class="border-b">
+                        <th class="text-left py-1">Range (± y)</th>
+                        <th class="text-left py-1">Multiplier</th>
+                        <th class="text-left py-1">Example</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr class="border-b border-gray-200">
+                        <td class="py-1 font-mono">± 0</td>
+                        <td class="py-1">8x</td>
+                        <td class="py-1 text-gray-600">Exactly right power of 10</td>
+                    </tr>
+                    <tr class="border-b border-gray-200">
+                        <td class="py-1 font-mono">± 1</td>
+                        <td class="py-1">5x</td>
+                        <td class="py-1 text-gray-600">Within 1 order of magnitude</td>
+                    </tr>
+                    <tr class="border-b border-gray-200">
+                        <td class="py-1 font-mono">± 2</td>
+                        <td class="py-1">2x</td>
+                        <td class="py-1 text-gray-600">Within 2 orders of magnitude</td>
+                    </tr>
+                    <tr>
+                        <td class="py-1 font-mono">± 3</td>
+                        <td class="py-1">1x</td>
+                        <td class="py-1 text-gray-600">Within 3 orders of magnitude</td>
+                    </tr>
+                </tbody>
+            </table>
+            <p class="mt-3 text-sm text-gray-600">The winner gains <span class="font-mono">ante × multiplier</span> chips. The loser loses the same amount.</p>
+        </div>
+
+        <div class="bg-gray-100 p-4 rounded-lg">
+            <h3 class="font-bold mb-2">Betting</h3>
+            <p>After the estimate is submitted, players alternate raising, calling, or folding — just like poker. If someone folds, their opponent wins the pot without revealing the answer.</p>
+        </div>
+
         <div class="bg-blue-100 p-4 rounded-lg">
-            <h3 class="font-bold mb-2">Strategic Tips</h3>
-            <ul class="list-disc ml-6">
-                <li>Balance precision with accuracy — narrower ranges (smaller y values) yield higher rewards but carry greater
-                    risk</li>
-                <li>Consider the difficulty of the question when deciding your uncertainty range</li>
-                <li>Watch your opponent's betting patterns to gauge their confidence</li>
+            <h3 class="font-bold mb-2">Example</h3>
+            <p class="text-sm">Question: "How many bones in the human body?" (true answer: ~200 = 10^2)</p>
+            <ul class="list-disc ml-6 mt-2 text-sm space-y-1">
+                <li>You estimate <span class="font-mono">10^(2 ± 1)</span> — a range from 10 to 1,000.</li>
+                <li>The true answer (200) is inside your range, so you win.</li>
+                <li>With a ± 1 range, the 5x multiplier applies. If the ante was 2 chips, you win 10.</li>
             </ul>
         </div>
     </div>
